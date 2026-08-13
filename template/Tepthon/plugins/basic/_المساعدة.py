@@ -214,15 +214,38 @@ async def help_cmd(event: NewMessage.Event):
                 link_preview=False,
             )
 
-        result = await event.client.inline_query(
-            tgbot.me.username,
-            "mohd",
-        )
+        try:
+            LOGS.info(
+                f"🔎 Inline query: @{tgbot.me.username} | query=mohd"
+            )
 
-        await result[0].click(
-            event.chat_id,
-            reply_to=event.id,
-        )
+            result = await event.client.inline_query(
+                tgbot.me.username,
+                "mohd",
+            )
+
+            LOGS.info(
+                f"✅ Inline query نجح: @{tgbot.me.username}"
+            )
+
+            if not result:
+                LOGS.error("❌ Inline query رجع نتائج فارغة")
+                return await event.eor(
+                    "❌ البوت المساعد لم يرجع نتائج Inline."
+                )
+
+            await result[0].click(
+                event.chat_id,
+                reply_to=event.id,
+            )
+
+        except Exception as er:
+            LOGS.exception(
+                f"❌ فشل Inline query للبوت @{tgbot.me.username}: {er}"
+            )
+            return await event.eor(
+                "❌ حدث خطأ في Inline. تم تسجيل التفاصيل في اللوج."
+            )
 
         await event.delete()
 
