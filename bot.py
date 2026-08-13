@@ -1,596 +1,290 @@
-import asyncio
-import time
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
-from telethon import TelegramClient, events, Button
-
-from config import (
-    API_ID,
-    API_HASH,
-    BOT_TOKEN,
-    OWNER_ID,
-    ACCOUNTS_DIR,
-    TEMPLATE_DIR,
-    DB_PATH,
-    ALLOW_USERS,
-    DEFAULT_DAYS,
-    MAX_DAYS,
-)
-
-from database import Database
-from manager.sessions import SessionManager
-from manager.processes import ProcessManager
+from aiogram import Router, F
+from aiogram.filters import CommandStart
+from aiogram.types import Message, CallbackQuery
+from aiogram.fsm.state import StatesGroup, State
+from aiogram.fsm.context import FSMContext
+from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 
-bot = TelegramClient(
-    "data/factory_bot",
-    API_ID,
-    API_HASH
-)
-
-db = Database(DB_PATH)
-sessions = SessionManager(ACCOUNTS_DIR)
-processes = ProcessManager(
-    ACCOUNTS_DIR,
-    TEMPLATE_DIR
-)
-
-states = {}
+router = Router()
 
 
-def is_owner(user_id):
-    return user_id == OWNER_ID
+class InstallState(StatesGroup):
+    waiting_name = State()
+    waiting_days = State()
 
 
-def menu():
-    buttons = [
-        [
-            Button.inline("➕ تنصيب", b"install"),
-            Button.inline("📋 تنصيباتي", b"my")
-        ]
-    ]
+def main_menu():
+    b = InlineKeyboardBuilder()
 
-    if is_owner(OWNER_ID):
-        buttons.append([
-            Button.inline("👨‍💻 لوحة المطور", b"admin")
-        ])
+    b.button(text="➕ تنصيب جديد", callback_data="new")
+    b.button(text="📋 تنصيبتي", callback_data="list")
+    b.button(text="📊 الحالة", callback_data="status")
+    b.button(text="🔄 تحديث", callback_data="list")
 
-    return buttons
+    b.adjust(2)
+
+    return b.as_markup()
 
 
-def admin_menu():
-    return [
-        [
-            Button.inline("📋 كل التنصيبات", b"admin_list")
-        ],
-        [
-            Button.inline("🎁 منح مجاني", b"admin_free"),
-            Button.inline("♾️ غير محدود", b"admin_unlimited")
-        ],
-        [
-            Button.inline("▶️ تشغيل", b"admin_start"),
-            Button.inline("⛔ إيقاف", b"admin_stop")
-        ],
-    ]
+def account_menu(iid):
+    b = InlineKeyboardBuilder()
+
+    b.button(text="▶️ تشغيل", callback_data=f"start:{iid}")
+    b.button(text="⛔ إيقاف", callback_data=f"stop:{iid}")
+    b.button(text="🔄 إعادة تشغيل", callback_data=f"restart:{iid}")
+    b.button(text="📄 السجل", callback_data=f"log:{iid}")
+    b.button(text="🗑 حذف", callback_data=f"delete:{iid}")
+    b.button(text="⬅️ رجوع", callback_data="list")
+
+    b.adjust(2, 2, 1, 1)
+
+    return b.as_markup()
 
 
-@bot.on(events.NewMessage(pattern="/start"))
-async def start(event):
-    if not ALLOW_USERS and not is_owner(event.sender_id):
-        await event.reply("❌ المصنع مغلق.")
-        return
-
-    await event.reply(
-        "🤖 <b>MSNA Tepthon Factory</b>\n\n"
-        "اختر العملية:",
-        buttons=menu(),
-        parse_mode="html"
-    )
+def allowed(user, owner):
+    return user and user.id == owner
 
 
-@bot.on(events.CallbackQuery(data=b"install"))
-async def install(event):
-    if not ALLOW_USERS and not is_owner(event.sender_id):
-        await event.answer("المصنع مغلق.", alert=True)
-        return
+def setup(dp, db, pm, owner):
 
-    states[event.sender_id] = {
-        "step": "name"
-    }
+    dp.include_router(router)
 
-    await event.edit(
-        "➕ <b>تنصيب جديد</b>\n\n"
-        "أرسل اسم النسخة:",
-        parse_mode="html"
-    )
+    @router.message(CommandStart())
+    async def start(message: Message):
 
+        if not allowed(message.from_user, owner):
+            return await message.answer("⛔ غير مصرح لك باستخدام هذا البوت.")
 
-@bot.on(events.CallbackQuery(data=b"my"))
-async def my_installs(event):
-    rows = db.user(event.sender_id)
-
-    if not rows:
-        await event.answer(
-            "لا توجد تنصيبات.",
-            alert=True
-        )
-        return
-
-    text = "📋 <b>تنصيباتك:</b>\n\n"
-
-    for row in rows:
-        if row["unlimited"]:
-            expiry = "♾️ غير محدود"
-        elif row["expires_at"]:
-            expiry = datetime.fromtimestamp(
-                row["expires_at"]
-            ).strftime("%Y-%m-%d")
-        else:
-            expiry = "غير محدد"
-
-        text += (
-            f"#{row['id']} — {row['name']}\n"
-            f"الحالة: {row['status']}\n"
-            f"الانتهاء: {expiry}\n\n"
+        await message.answer(
+            "🤖 <b>Tepthon Factory</b>\n\n"
+            "مرحبًا بك في مصنع Tepthon.\n"
+            "يمكنك إنشاء وإدارة التنصيبات من الأزرار بالأسفل.",
+            reply_markup=main_menu(),
         )
 
-    await event.edit(
-        text,
-        parse_mode="html"
-    )
+    @router.callback_query(F.data == "home")
+    async def home(callback: CallbackQuery):
 
+        if callback.from_user.id != owner:
+            return await callback.answer("غير مصرح", show_alert=True)
 
-@bot.on(events.CallbackQuery(data=b"admin"))
-async def admin(event):
-    if not is_owner(event.sender_id):
-        await event.answer(
-            "للمطور فقط.",
-            alert=True
-        )
-        return
-
-    await event.edit(
-        "👨‍💻 <b>لوحة المطور</b>\n\n"
-        "اختر العملية:",
-        buttons=admin_menu(),
-        parse_mode="html"
-    )
-
-
-@bot.on(events.CallbackQuery(data=b"admin_list"))
-async def admin_list(event):
-    if not is_owner(event.sender_id):
-        return
-
-    rows = db.all()
-
-    if not rows:
-        await event.answer(
-            "لا توجد تنصيبات.",
-            alert=True
-        )
-        return
-
-    text = "📋 <b>كل التنصيبات:</b>\n\n"
-
-    for r in rows:
-        text += (
-            f"#{r['id']} | "
-            f"{r['name']} | "
-            f"user={r['user_id']} | "
-            f"{r['status']}\n"
+        await callback.message.edit_text(
+            "🤖 <b>Tepthon Factory</b>\n\n"
+            "اختر العملية المطلوبة:",
+            reply_markup=main_menu(),
         )
 
-    await event.edit(
-        text,
-        parse_mode="html"
-    )
+        await callback.answer()
 
+    # =========================
+    # إنشاء تنصيب
+    # =========================
 
-@bot.on(events.CallbackQuery(data=b"admin_free"))
-async def admin_free(event):
-    if not is_owner(event.sender_id):
-        return
+    @router.callback_query(F.data == "new")
+    async def new_install(callback: CallbackQuery, state: FSMContext):
 
-    states[event.sender_id] = {
-        "step": "free_user"
-    }
+        if callback.from_user.id != owner:
+            return await callback.answer("غير مصرح", show_alert=True)
 
-    await event.edit(
-        "🎁 أرسل Telegram User ID للشخص الذي تريد فتح "
-        "التنصيب له مجانًا."
-    )
+        await state.set_state(InstallState.waiting_name)
 
-
-@bot.on(events.CallbackQuery(data=b"admin_unlimited"))
-async def admin_unlimited(event):
-    if not is_owner(event.sender_id):
-        return
-
-    states[event.sender_id] = {
-        "step": "unlimited_install"
-    }
-
-    await event.edit(
-        "♾️ أرسل رقم التنصيب INSTALL ID."
-    )
-
-
-@bot.on(events.CallbackQuery(data=b"admin_start"))
-async def admin_start(event):
-    if not is_owner(event.sender_id):
-        return
-
-    states[event.sender_id] = {
-        "step": "start_install"
-    }
-
-    await event.edit(
-        "▶️ أرسل INSTALL ID للتشغيل."
-    )
-
-
-@bot.on(events.CallbackQuery(data=b"admin_stop"))
-async def admin_stop(event):
-    if not is_owner(event.sender_id):
-        return
-
-    states[event.sender_id] = {
-        "step": "stop_install"
-    }
-
-    await event.edit(
-        "⛔ أرسل INSTALL ID للإيقاف."
-    )
-
-
-@bot.on(events.NewMessage)
-async def messages(event):
-    if not event.is_private:
-        return
-
-    if event.raw_text.startswith("/"):
-        return
-
-    uid = event.sender_id
-
-    if uid not in states:
-        return
-
-    state = states[uid]
-    step = state["step"]
-    text = event.raw_text.strip()
-
-    # اسم التنصيب
-    if step == "name":
-        state["name"] = text
-
-        await event.reply(
-            "اختر طريقة تسجيل الحساب:",
-            buttons=[
-                [
-                    Button.inline(
-                        "📱 رقم الهاتف",
-                        b"login_phone"
-                    )
-                ],
-                [
-                    Button.inline(
-                        "🔑 Session String",
-                        b"login_session"
-                    )
-                ]
-            ]
+        await callback.message.answer(
+            "➕ <b>إنشاء تنصيب جديد</b>\n\n"
+            "أرسل اسم التنصيب:"
         )
 
-        state["step"] = "method"
-        return
+        await callback.answer()
 
-    # رقم الهاتف
-    if step == "phone":
-        state["phone"] = text
+    @router.message(InstallState.waiting_name)
+    async def get_name(message: Message, state: FSMContext
 
-        try:
-            await sessions.send_code(
-                text,
-                API_ID,
-                API_HASH
-            )
 
-            state["step"] = "code"
+cat > manager/processes.py <<'PY'
+import os
+import shutil
+import signal
+import subprocess
+import sys
 
-            await event.reply(
-                "📩 تم إرسال كود Telegram.\n"
-                "أرسله هنا."
-            )
+from pathlib import Path
 
-        except Exception as e:
-            await event.reply(
-                f"❌ فشل إرسال الكود:\n{e}"
-            )
 
-        return
+class ProcessManager:
 
-    # كود Telegram
-    if step == "code":
-        state["code"] = text
-        state["step"] = "password"
+    def __init__(self, template_dir, accounts_dir):
 
-        await event.reply(
-            "إذا كان الحساب محميًا بـ 2FA، "
-            "أرسل كلمة المرور.\n\n"
-            "إذا لا يوجد 2FA أرسل:\n"
-            "<code>لا</code>",
-            parse_mode="html"
+        self.template = Path(template_dir)
+        self.accounts = Path(accounts_dir)
+
+        self.accounts.mkdir(
+            parents=True,
+            exist_ok=True,
         )
 
-        return
+        self.procs = {}
 
-    # 2FA
-    if step == "password":
-        password = None if text == "لا" else text
+    def path(self, install_id):
 
-        try:
-            iid = await create_install(
-                uid,
-                state["name"]
+        return self.accounts / str(install_id)
+
+    def create(self, install_id):
+
+        if not self.template.exists():
+
+            raise RuntimeError(
+                f"Template not found: {self.template}"
             )
 
-            path = await sessions.login_code(
-                iid,
-                state["phone"],
-                state["code"],
-                API_ID,
-                API_HASH,
-                password
+        destination = self.path(install_id)
+
+        if destination.exists():
+
+            shutil.rmtree(destination)
+
+        shutil.copytree(
+            self.template,
+            destination,
+        )
+
+        return destination
+
+    def start(self, install_id):
+
+        directory = self.path(install_id)
+
+        if not directory.exists():
+
+            raise RuntimeError(
+                "Account directory does not exist"
             )
 
-            db.session(
-                iid,
-                path,
-                state["phone"]
-            )
+        self.stop(install_id)
 
-            pid = processes.start(iid)
+        env = os.environ.copy()
 
-            db.status(iid, "running")
+        env["FACTORY_INSTALL_ID"] = str(
+            install_id
+        )
 
-            await event.reply(
-                f"✅ <b>تم التنصيب</b>\n\n"
-                f"ID: <code>{iid}</code>\n"
-                f"PID: <code>{pid}</code>",
-                parse_mode="html"
-            )
+        log_path = directory / "factory.log"
 
-            states.pop(uid, None)
+        log_file = open(
+            log_path,
+            "a",
+            encoding="utf-8",
+        )
 
-        except Exception as e:
-            await event.reply(
-                f"❌ فشل التنصيب:\n{e}"
-            )
+        process = subprocess.Popen(
+            [
+                sys.executable,
+                "-u",
+                "main.py",
+            ],
+            cwd=directory,
+            env=env,
+            stdout=log_file,
+            stderr=subprocess.STDOUT,
+            start_new_session=True,
+        )
 
-        return
+        self.procs[install_id] = (
+            process,
+            log_file,
+        )
 
-    # Session String
-    if step == "session":
-        try:
-            iid = await create_install(
-                uid,
-                state["name"]
-            )
+        return process.pid
 
-            path = await sessions.from_string(
-                iid,
-                text,
-                API_ID,
-                API_HASH
-            )
+    def stop(self, install_id):
 
-            db.session(iid, path)
+        item = self.procs.pop(
+            install_id,
+            None,
+        )
 
-            pid = processes.start(iid)
-
-            db.status(iid, "running")
-
-            await event.reply(
-                f"✅ <b>تم التنصيب</b>\n\n"
-                f"ID: <code>{iid}</code>\n"
-                f"PID: <code>{pid}</code>",
-                parse_mode="html"
-            )
-
-            states.pop(uid, None)
-
-        except Exception as e:
-            await event.reply(
-                f"❌ فشل التنصيب:\n{e}"
-            )
-
-        return
-
-    # المطور يمنح مستخدمًا صلاحية مجانية
-    if step == "free_user":
-        if not is_owner(uid):
+        if not item:
             return
 
-        try:
-            target = int(text)
-
-            # سجل صلاحية مجانية دائمة.
-            iid = db.create(
-                target,
-                "free-access",
-                unlimited=True
-            )
-
-            await event.reply(
-                f"🎁 تم فتح تنصيب مجاني للمستخدم:\n"
-                f"<code>{target}</code>\n\n"
-                f"Install ID: <code>{iid}</code>\n"
-                f"المدة: ♾️ غير محدود",
-                parse_mode="html"
-            )
-
-            states.pop(uid, None)
-
-        except ValueError:
-            await event.reply("أرسل User ID صحيح.")
-
-        return
-
-    # المطور يجعل تنصيبًا غير محدود
-    if step == "unlimited_install":
-        if not is_owner(uid):
-            return
+        process, log_file = item
 
         try:
-            iid = int(text)
 
-            if not db.get(iid):
-                await event.reply("❌ التنصيب غير موجود.")
-                return
-
-            db.unlimited(iid)
-
-            await event.reply(
-                f"♾️ تم جعل التنصيب #{iid} "
-                "غير محدود."
+            os.killpg(
+                process.pid,
+                signal.SIGTERM,
             )
 
-            states.pop(uid, None)
+        except Exception:
 
-        except ValueError:
-            await event.reply("أرسل INSTALL ID صحيح.")
+            try:
+                process.terminate()
 
-        return
-
-    if step == "start_install":
-        if not is_owner(uid):
-            return
+            except Exception:
+                pass
 
         try:
-            iid = int(text)
-            row = db.get(iid)
 
-            if not row:
-                await event.reply("❌ غير موجود.")
-                return
+            process.wait(timeout=8)
 
-            pid = processes.start(iid)
-            db.status(iid, "running")
+        except Exception:
 
-            await event.reply(
-                f"▶️ تم التشغيل.\nPID: {pid}"
-            )
-
-            states.pop(uid, None)
-
-        except Exception as e:
-            await event.reply(f"❌ {e}")
-
-        return
-
-    if step == "stop_install":
-        if not is_owner(uid):
-            return
-
-        try:
-            iid = int(text)
-
-            processes.stop(iid)
-            db.status(iid, "stopped")
-
-            await event.reply(
-                f"⛔ تم إيقاف #{iid}"
-            )
-
-            states.pop(uid, None)
-
-        except Exception as e:
-            await event.reply(f"❌ {e}")
-
-
-@bot.on(events.CallbackQuery(data=b"login_phone"))
-async def login_phone(event):
-    uid = event.sender_id
-
-    if uid not in states:
-        return
-
-    states[uid]["step"] = "phone"
-
-    await event.edit(
-        "📱 أرسل رقم الهاتف بصيغة دولية.\n\n"
-        "مثال:\n"
-        "<code>+9665xxxxxxxx</code>",
-        parse_mode="html"
-    )
-
-
-@bot.on(events.CallbackQuery(data=b"login_session"))
-async def login_session(event):
-    uid = event.sender_id
-
-    if uid not in states:
-        return
-
-    states[uid]["step"] = "session"
-
-    await event.edit(
-        "🔑 أرسل Session String."
-    )
-
-
-async def create_install(user_id, name):
-    # افتراضيًا تنصيب المستخدم يكون بالمدة المحددة.
-    # التنصيبات التي يفتحها المطور تكون غير محدودة.
-    expires = time.time() + DEFAULT_DAYS * 86400
-
-    iid = db.create(
-        user_id,
-        name,
-        expires_at=expires,
-        unlimited=False
-    )
-
-    processes.create(iid)
-
-    return iid
-
-
-async def expiry_worker():
-    while True:
-        now = time.time()
-
-        for row in db.all():
-
-            if row["unlimited"]:
-                continue
-
-            if (
-                row["expires_at"]
-                and row["expires_at"] <= now
-                and row["status"] == "running"
-            ):
-                processes.stop(row["id"])
-                db.status(
-                    row["id"],
-                    "expired"
+            try:
+                os.killpg(
+                    process.pid,
+                    signal.SIGKILL,
                 )
 
-        await asyncio.sleep(60)
+            except Exception:
+                pass
 
+        try:
+            log_file.close()
 
-async def main():
-    await bot.start(
-        bot_token=BOT_TOKEN
-    )
+        except Exception:
+            pass
 
-    print("=" * 40)
-    print("MSNA Factory started")
-    print("Telethon:", __import__("telethon").__version__)
-    print("=" * 40)
+    def restart(self, install_id):
 
-    asyncio.create_task(expiry_worker())
+        self.stop(install_id)
 
-    await bot.run_until_disconnected()
+        return self.start(
+            install_id
+        )
+
+    def delete(self, install_id):
+
+        self.stop(install_id)
+
+        directory = self.path(
+            install_id
+        )
+
+        if directory.exists():
+
+            shutil.rmtree(
+                directory
+            )
+
+    def log(self, install_id):
+
+        log_path = (
+            self.path(install_id)
+            / "factory.log"
+        )
+
+        if not log_path.exists():
+
+            return ""
+
+        try:
+
+            return log_path.read_text(
+                encoding="utf-8",
+                errors="replace",
+            )
+
+        except Exception as error:
+
+            return f"Unable to read log: {error}"
