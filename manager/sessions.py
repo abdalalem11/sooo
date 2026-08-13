@@ -1,8 +1,7 @@
-import shutil
 from pathlib import Path
 
 from telethon import TelegramClient
-from telethon.sessions import StringSession, SQLiteSession
+from telethon.sessions import StringSession
 from telethon.errors import (
     SessionPasswordNeededError,
     PhoneCodeExpiredError,
@@ -32,10 +31,9 @@ class SessionManager:
         old_client = self.clients.pop(phone, None)
         self.phone_hashes.pop(phone, None)
 
-        if old_client is not None:
+        if old_client:
             try:
-                if old_client.is_connected():
-                    await old_client.disconnect()
+                await old_client.disconnect()
             except Exception:
                 pass
 
@@ -62,10 +60,7 @@ class SessionManager:
         try:
             result = await client.send_code_request(phone)
         except Exception:
-            try:
-                await client.disconnect()
-            except Exception:
-                pass
+            await client.disconnect()
             raise
 
         self.clients[phone] = client
@@ -78,20 +73,16 @@ class SessionManager:
 
         if client is None:
             raise RuntimeError(
-                "جلسة التحقق غير موجودة. ابدأ التنصيب من جديد."
+                "جلسة التحقق غير موجودة. ابدأ تسجيل الدخول من جديد."
             )
 
         if not client.is_connected():
             await client.connect()
 
-        try:
-            result = await client.send_code_request(phone)
-        except SendCodeUnavailableError:
-            raise RuntimeError(
-                "Telegram لا يسمح بإرسال كود جديد لهذا الرقم حاليًا."
-            )
+        result = await client.send_code_request(phone)
 
         self.phone_hashes[phone] = result.phone_code_hash
+
         return result
 
     async def login_code(
@@ -107,7 +98,7 @@ class SessionManager:
 
         if client is None:
             raise RuntimeError(
-                "جلسة التحقق غير موجودة. ابدأ التنصيب من جديد."
+                "جلسة التحقق غير موجودة."
             )
 
         if not client.is_connected():
@@ -121,7 +112,7 @@ class SessionManager:
 
                 if not phone_code_hash:
                     raise RuntimeError(
-                        "كود التحقق غير موجود. أرسل كودًا جديدًا."
+                        "كود التحقق غير موجود."
                     )
 
                 await client.sign_in(
@@ -135,7 +126,7 @@ class SessionManager:
 
         except PhoneCodeExpiredError:
             raise RuntimeError(
-                "انتهت صلاحية كود Telegram. أعد إرسال الكود."
+                "انتهت صلاحية الكود. أرسل كودًا جديدًا."
             )
 
         except PhoneCodeInvalidError:
@@ -144,7 +135,9 @@ class SessionManager:
             )
 
         if not await client.is_user_authorized():
-            raise RuntimeError("فشل التحقق من الحساب.")
+            raise RuntimeError(
+                "فشل تسجيل الدخول للحساب."
+            )
 
         client.session.save()
 
@@ -163,7 +156,7 @@ class SessionManager:
 
         if not pending_file.exists():
             raise RuntimeError(
-                "ملف جلسة Telegram لم يتم إنشاؤه."
+                "لم يتم إنشاء ملف جلسة Telegram."
             )
 
         target_file.parent.mkdir(
@@ -171,14 +164,11 @@ class SessionManager:
             exist_ok=True,
         )
 
-        shutil.copy2(
-            pending_file,
-            target_file,
-        )
+        pending_file.replace(target_file)
 
         return str(self._session_path(install_id))
 
-    async def install_string_session(
+    async def import_string(
         self,
         install_id,
         session_string,
@@ -188,67 +178,105 @@ class SessionManager:
         session_string = session_string.strip()
 
         if not session_string:
-            raise RuntimeError("Session String فارغة.")
+            raise RuntimeError(
+                "Session String فارغة."
+            )
 
         try:
-            source_session = StringSession(session_string)
-
             client = TelegramClient(
-                source_session,
+                StringSession(session_string),
                 api_id,
                 api_hash,
             )
 
             await client.connect()
 
-            if not await client.is_user_authorized():
-                await client.disconnect()
-                raise RuntimeError(
-                    "Session String غير صالحة أو غير مسجلة الدخول."
+            try:
+                authorized = await client.is_user_authorized()
+
+                if not authorized:
+                    raise RuntimeError(
+                        "Session String غير صالحة أو غير مسجلة الدخول."
+                    )
+
+                session_file = self._session_path(
+                    install_id
                 )
 
-            target_base = self._session_path(install_id)
-            target_base.parent.mkdir(
-                parents=True,
-                exist_ok=True,
+                session_file.parent.mkdir(
+                    parents=True,
+                    exist_ok=True,
+                )
+
+                client.session.save()
+
+                saved_string = client.session.save()
+
+            finally:
+                await client.disconnect()
+
+            final_client = TelegramClient(
+                StringSession(saved_string),
+                api_id,
+                api_hash,
             )
 
-            target = SQLiteSession(str(target_base))
+            await final_client.connect()
 
-            target.set_dc(
-                client.session.dc_id,
-                client.session.server_address,
-                client.session.port,
-            )
+            try:
+                final_client.session.save()
 
-            target.auth_key = client.session.auth_key
+                target_file = Path(
+                    str(session_file) + ".session"
+                )
 
-            if hasattr(client.session, "takeout_id"):
-                target.takeout_id = client.session.takeout_id
+                # إنشاء جلسة SQLite من Session String
+                temp_client = TelegramClient(
+                    str(session_file),
+                    api_id,
+                    api_hash,
+                )
 
-            target.save()
+                await temp_client.connect()
 
-            await client.disconnect()
+                try:
+                    temp_client.session.set_dc(
+                        final_client.session.dc_id,
+                        final_client.session.server_address,
+                        final_client.session.port,
+                    )
 
-            target_file = Path(str(target_base) + ".session")
+                    temp_client.session.auth_key = (
+                        final_client.session.auth_key
+                    )
+
+                    temp_client.session.save()
+
+                finally:
+                    await temp_client.disconnect()
+
+            finally:
+                await final_client.disconnect()
 
             if not target_file.exists():
                 raise RuntimeError(
-                    "تعذر إنشاء ملف Session للحساب."
+                    "فشل إنشاء ملف session."
                 )
 
-            return str(target_base)
+            return str(session_file)
+
+        except RuntimeError:
+            raise
 
         except Exception as error:
             raise RuntimeError(
                 f"فشل تحويل Session String: {error}"
-            ) from error
+            )
 
     async def close(self):
         for client in list(self.clients.values()):
             try:
-                if client.is_connected():
-                    await client.disconnect()
+                await client.disconnect()
             except Exception:
                 pass
 
