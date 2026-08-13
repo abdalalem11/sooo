@@ -376,8 +376,16 @@ def setup(dp, db, pm, sessions, owner):
             await callback.answer("✅ تم إرسال كود جديد")
 
         except Exception as error:
+            error_text = str(error)
+
+            if "SendCodeUnavailableError" in error_text:
+                return await callback.answer(
+                    "⚠️ Telegram لا يسمح بإرسال كود جديد لهذا الرقم حالياً. حاول لاحقاً أو ابدأ تسجيل الدخول من جديد.",
+                    show_alert=True,
+                )
+
             await callback.answer(
-                str(error),
+                "❌ تعذر إعادة إرسال الكود. حاول مرة أخرى لاحقاً.",
                 show_alert=True,
             )
 
