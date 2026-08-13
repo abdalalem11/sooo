@@ -41,13 +41,6 @@ class ProcessManager:
 
         package = directory / "Tepthon"
 
-        session_path = directory / "session"
-        if not session_path.exists():
-            raise RuntimeError(
-                f"Session غير موجودة للحساب {install_id}. "
-                "سجّل الدخول أولاً من المصنع."
-            )
-
         if not package.exists():
             raise RuntimeError(
                 f"Tepthon package not found: {package}"
@@ -58,6 +51,24 @@ class ProcessManager:
                 "Tepthon/__main__.py غير موجود."
             )
 
+        # Telethon SQLite session تكون عادةً:
+        # session.session
+        session_base = directory / "session"
+        session_file = directory / "session.session"
+
+        if not session_file.exists():
+            # دعم أي ملف session موجود داخل مجلد الحساب
+            candidates = list(directory.glob("*.session"))
+
+            if candidates:
+                session_file = candidates[0]
+                session_base = session_file.with_suffix("")
+            else:
+                raise RuntimeError(
+                    f"Session غير موجودة للحساب {install_id}. "
+                    "سجّل الدخول أولاً من المصنع."
+                )
+
         self.stop(install_id)
 
         env = os.environ.copy()
@@ -65,12 +76,20 @@ class ProcessManager:
         env["FACTORY_INSTALL_ID"] = str(install_id)
         env["FACTORY_ACCOUNT_DIR"] = str(directory.absolute())
 
-        session_path = directory / "session"
-        env["SESSION"] = str(session_path.absolute())
-        env["REDISHOST"] = os.getenv("REDISHOST", "127.0.0.1")
-        env["REDISPORT"] = os.getenv("REDISPORT", "6379")
+        # نعطي Tepthon مسار ملف الجلسة الفعلي
+        env["SESSION"] = str(session_file.absolute())
 
-        # PORT مخصص للمصنع الرئيسي على Render
+        env["REDISHOST"] = os.getenv(
+            "REDISHOST",
+            "127.0.0.1",
+        )
+
+        env["REDISPORT"] = os.getenv(
+            "REDISPORT",
+            "6379",
+        )
+
+        # PORT خاص بالمصنع الرئيسي
         env.pop("PORT", None)
 
         log_path = directory / "factory.log"
