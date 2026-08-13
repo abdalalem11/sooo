@@ -1,152 +1,167 @@
 import os
-import signal
 import shutil
+import signal
 import subprocess
 import sys
 from pathlib import Path
 
 
 class ProcessManager:
-    def __init__(self, accounts_dir, template_dir):
-        self.accounts = Path(accounts_dir)
+
+    def __init__(self, template_dir, accounts_dir):
         self.template = Path(template_dir)
+        self.accounts = Path(accounts_dir)
 
-        self.accounts.mkdir(parents=True, exist_ok=True)
+        self.accounts.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
 
-        self.processes = {}
+        self.procs = {}
+
+    def path(self, install_id):
+        return self.accounts / str(install_id)
 
     def create(self, install_id):
         if not self.template.exists():
             raise RuntimeError(
-                f"Tepthon غير موجود في {self.template}"
+                f"Template not found: {self.template}"
             )
 
-        destination = self.accounts / str(install_id)
+        destination = self.path(install_id)
 
         if destination.exists():
             shutil.rmtree(destination)
 
         shutil.copytree(
             self.template,
-            destination
+            destination,
         )
 
         return destination
 
     def start(self, install_id):
-        directory = self.accounts / str(install_id)
+        directory = self.path(install_id)
 
-        package = directory / "Tepthon"
-        database = directory / "database"
-
-        if not package.exists():
+        if not directory.exists():
             raise RuntimeError(
-                f"مجلد Tepthon غير موجود داخل {directory}"
+                "Account directory does not exist"
             )
 
-        if not (package / "__main__.py").exists():
-            raise RuntimeError(
-                f"Tepthon/__main__.py غير موجود داخل {directory}"
-            )
-
-        if not database.exists():
-            raise RuntimeError(
-                f"مجلد database غير موجود داخل {directory}"
-            )
-
-        old = self.processes.get(install_id)
-
-        if old and old.poll() is None:
-            return old.pid
-
-        log_path = directory / "factory.log"
-
-        log = open(
-            log_path,
-            "a",
-            encoding="utf-8"
-        )
+        self.stop(install_id)
 
         env = os.environ.copy()
 
-        # معلومات المصنع
         env["FACTORY_INSTALL_ID"] = str(install_id)
         env["FACTORY_ACCOUNT_DIR"] = str(
             directory.absolute()
         )
 
-        # جلسة الحساب الخاصة بهذا التنصيب
         session_path = directory / "session"
-
         env["SESSION"] = str(
             session_path.absolute()
         )
 
-        # مهم جدًا:
-        # لا نرسل PORT إلى Tepthon الفرعي.
-        # الـ PORT مخصص لبوت المصنع نفسه على Render.
+        # PORT خاص بمصنع Render وليس بالحساب الفرعي.
         env.pop("PORT", None)
 
-        # تشغيل Tepthon كـ package
-        command = [
-            sys.executable,
-            "-u",
-            "-m",
-            "Tepthon",
-        ]
+        log_path = directory / "factory.log"
+
+        log_file = open(
+            log_path,
+            "a",
+            encoding="utf-8",
+        )
 
         process = subprocess.Popen(
-            command,
+            [
+                sys.executable,
+                "-u",
+                "-m",
+                "Tepthon",
+            ],
             cwd=directory,
-            stdout=log,
+            env=env,
+            stdout=log_file,
             stderr=subprocess.STDOUT,
             stdin=subprocess.DEVNULL,
             start_new_session=True,
-            env=env,
         )
 
-        self.processes[install_id] = process
+        self.procs[install_id] = (
+            process,
+            log_file,
+        )
 
         return process.pid
 
     def stop(self, install_id):
-        process = self.processes.get(install_id)
+        item = self.procs.pop(
+            install_id,
+            None,
+        )
 
-        if not process:
+        if not item:
             return
 
-        if process.poll() is not None:
-            self.processes.pop(
-                install_id,
-                None
-            )
-            return
+        process, log_file = item
+
+        if process.poll() is None:
+            try:
+                os.killpg(
+                    process.pid,
+                    signal.SIGTERM,
+                )
+            except Exception:
+                try:
+                    process.terminate()
+                except Exception:
+                    pass
+
+            try:
+                process.wait(timeout=8)
+            except Exception:
+                try:
+                    os.killpg(
+                        process.pid,
+                        signal.SIGKILL,
+                    )
+                except Exception:
+                    try:
+                        process.kill()
+                    except Exception:
+                        pass
 
         try:
-            os.killpg(
-                process.pid,
-                signal.SIGTERM
-            )
+            log_file.close()
         except Exception:
-            try:
-                process.terminate()
-            except Exception:
-                pass
-
-        self.processes.pop(
-            install_id,
-            None
-        )
+            pass
 
     def restart(self, install_id):
         self.stop(install_id)
-
         return self.start(install_id)
 
     def delete(self, install_id):
         self.stop(install_id)
 
-        directory = self.accounts / str(install_id)
+        directory = self.path(install_id)
 
         if directory.exists():
             shutil.rmtree(directory)
+
+    def log(self, install_id):
+        log_path = (
+            self.path(install_id)
+            / "factory.log"
+        )
+
+        if not log_path.exists():
+            return ""
+
+        try:
+            return log_path.read_text(
+                encoding="utf-8",
+                errors="replace",
+            )
+        except Exception as error:
+            return f"Unable to read log: {error}"
