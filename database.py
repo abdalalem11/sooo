@@ -31,6 +31,77 @@ class Database:
             """)
             db.commit()
 
+    def init(self):
+        with self.connect() as db:
+            db.execute("""
+                CREATE TABLE IF NOT EXISTS installs (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL,
+                    name TEXT NOT NULL,
+                    expires_at REAL,
+                    unlimited INTEGER DEFAULT 0,
+                    status TEXT DEFAULT 'stopped',
+                    phone TEXT,
+                    session_path TEXT,
+                    created_at REAL NOT NULL
+                )
+            """)
+
+            db.execute("""
+                CREATE TABLE IF NOT EXISTS access_requests (
+                    user_id INTEGER PRIMARY KEY,
+                    status TEXT DEFAULT 'pending',
+                    created_at REAL NOT NULL
+                )
+            """)
+
+            db.commit()
+
+    def access_request(self, user_id):
+        with self.connect() as db:
+            row = db.execute(
+                "SELECT * FROM access_requests WHERE user_id=?",
+                (user_id,)
+            ).fetchone()
+
+            return dict(row) if row else None
+
+    def request_access(self, user_id):
+        with self.connect() as db:
+            db.execute("""
+                INSERT INTO access_requests
+                (user_id, status, created_at)
+                VALUES (?, 'pending', ?)
+                ON CONFLICT(user_id)
+                DO UPDATE SET
+                    status='pending',
+                    created_at=excluded.created_at
+            """, (user_id, time.time()))
+
+            db.commit()
+
+    def set_access(self, user_id, status):
+        with self.connect() as db:
+            db.execute("""
+                INSERT INTO access_requests
+                (user_id, status, created_at)
+                VALUES (?, ?, ?)
+                ON CONFLICT(user_id)
+                DO UPDATE SET status=excluded.status
+            """, (user_id, status, time.time()))
+
+            db.commit()
+
+    def access_users(self, status="pending"):
+        with self.connect() as db:
+            rows = db.execute(
+                "SELECT * FROM access_requests "
+                "WHERE status=? ORDER BY created_at ASC",
+                (status,)
+            ).fetchall()
+
+            return [dict(x) for x in rows]
+
     def create(self, user_id, name, expires_at=None, unlimited=False):
         with self.connect() as db:
             cur = db.execute("""

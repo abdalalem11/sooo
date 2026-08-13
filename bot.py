@@ -90,6 +90,63 @@ async def expiration_worker(db, pm):
 
 
 # ============================================================
+# ACCESS CONTROL
+# ============================================================
+
+def has_access(user, owner, db):
+    if user is None:
+        return False
+
+    if user.id == owner:
+        return True
+
+    row = db.access_request(user.id)
+
+    return bool(row and row["status"] == "approved")
+
+
+def paid_menu():
+    b = InlineKeyboardBuilder()
+
+    b.button(
+        text="💳 طلب الاشتراك",
+        callback_data="request_access",
+    )
+
+    b.button(
+        text="👨‍💻 مراسلة المطور @SSSTlF",
+        url="https://t.me/SSSTlF",
+    )
+
+    b.button(
+        text="⬅️ رجوع",
+        callback_data="home",
+    )
+
+    b.adjust(1)
+
+    return b.as_markup()
+
+
+def access_request_buttons(user_id):
+    b = InlineKeyboardBuilder()
+
+    b.button(
+        text="✅ موافقة",
+        callback_data=f"access_approve:{user_id}",
+    )
+
+    b.button(
+        text="❌ رفض",
+        callback_data=f"access_reject:{user_id}",
+    )
+
+    b.adjust(2)
+
+    return b.as_markup()
+
+
+# ============================================================
 # MAIN MENU
 # ============================================================
 
@@ -268,10 +325,8 @@ def setup(dp, db, pm, sessions, owner):
     @router.message(CommandStart())
     async def start(message: Message):
 
-        if not allowed(message.from_user, owner):
-            return await message.answer(
-                "⛔ غير مصرح لك باستخدام هذا البوت."
-            )
+        if message.from_user is None:
+            return
 
         text = (
             "🤖 <b>Tepthon Factory</b>\n\n"
@@ -293,12 +348,6 @@ def setup(dp, db, pm, sessions, owner):
         callback: CallbackQuery,
         state: FSMContext,
     ):
-
-        if callback.from_user.id != owner:
-            return await callback.answer(
-                "غير مصرح",
-                show_alert=True,
-            )
 
         await state.clear()
 
@@ -327,11 +376,19 @@ def setup(dp, db, pm, sessions, owner):
         callback: CallbackQuery,
     ):
 
-        if callback.from_user.id != owner:
-            return await callback.answer(
-                "غير مصرح",
-                show_alert=True,
+        if callback.from_user is None:
+            return await callback.answer()
+
+        if not has_access(callback.from_user, owner, db):
+            await callback.message.edit_text(
+                "💳 <b>خدمة التنصيب مدفوعة</b>\n\n"
+                "للحصول على صلاحية التنصيب، أرسل طلب اشتراك.\n"
+                "بعد موافقة المطور ستتمكن من استخدام خدمة التنصيب.\n\n"
+                "👨‍💻 المطور: @SSSTlF",
+                reply_markup=paid_menu(),
             )
+
+            return await callback.answer()
 
         await callback.message.edit_text(
             "💌 <b>طلب تنصيب</b>\n\n"
@@ -340,6 +397,147 @@ def setup(dp, db, pm, sessions, owner):
         )
 
         await callback.answer()
+
+
+    # ========================================================
+    # ACCESS REQUEST
+    # ========================================================
+
+    @router.callback_query(F.data == "request_access")
+    async def request_access_handler(
+        callback: CallbackQuery,
+    ):
+
+        user = callback.from_user
+
+        if user is None:
+            return await callback.answer()
+
+        if user.id == owner:
+            return await callback.answer(
+                "✅ أنت المالك.",
+                show_alert=True,
+            )
+
+        current = db.access_request(user.id)
+
+        if current and current["status"] == "approved":
+            return await callback.answer(
+                "✅ حسابك مصرح له بالفعل.",
+                show_alert=True,
+            )
+
+        db.request_access(user.id)
+
+        await callback.message.edit_text(
+            "📨 <b>تم إرسال طلب الاشتراك.</b>\n\n"
+            "انتظر موافقة المطور.\n"
+            "بعد الموافقة ستتمكن من استخدام خدمة التنصيب.\n\n"
+            "👨‍💻 @SSSTlF",
+            reply_markup=paid_menu(),
+        )
+
+        try:
+            await callback.bot.send_message(
+                owner,
+                "💳 <b>طلب اشتراك جديد</b>\n\n"
+                f"👤 الاسم: {html.escape(user.full_name or 'بدون اسم')}\n"
+                f"🆔 ID: <code>{user.id}</code>\n"
+                f"🔗 username: @{user.username if user.username else 'لا يوجد'}\n\n"
+                "هل تريد الموافقة؟",
+                reply_markup=access_request_buttons(user.id),
+            )
+        except Exception as error:
+            print(f"Access request notification error: {error}")
+
+        await callback.answer("📨 تم إرسال الطلب.")
+
+
+    # ========================================================
+    # APPROVE ACCESS
+    # ========================================================
+
+    @router.callback_query(F.data.startswith("access_approve:"))
+    async def approve_access(
+        callback: CallbackQuery,
+    ):
+
+        if callback.from_user.id != owner:
+            return await callback.answer(
+                "غير مصرح",
+                show_alert=True,
+            )
+
+        try:
+            user_id = int(callback.data.split(":")[1])
+        except (ValueError, IndexError):
+            return await callback.answer(
+                "❌ رقم المستخدم غير صحيح.",
+                show_alert=True,
+            )
+
+        db.set_access(user_id, "approved")
+
+        try:
+            await callback.bot.send_message(
+                user_id,
+                "✅ <b>تمت الموافقة على اشتراكك.</b>\n\n"
+                "يمكنك الآن استخدام خدمة التنصيب.",
+                reply_markup=main_menu(),
+            )
+        except Exception as error:
+            print(f"Approval notification error: {error}")
+
+        await callback.message.edit_text(
+            f"✅ <b>تمت الموافقة.</b>\n\n"
+            f"المستخدم: <code>{user_id}</code>",
+        )
+
+        await callback.answer("تمت الموافقة.")
+
+
+    # ========================================================
+    # REJECT ACCESS
+    # ========================================================
+
+    @router.callback_query(F.data.startswith("access_reject:"))
+    async def reject_access(
+        callback: CallbackQuery,
+    ):
+
+        if callback.from_user.id != owner:
+            return await callback.answer(
+                "غير مصرح",
+                show_alert=True,
+            )
+
+        try:
+            user_id = int(callback.data.split(":")[1])
+        except (ValueError, IndexError):
+            return await callback.answer(
+                "❌ رقم المستخدم غير صحيح.",
+                show_alert=True,
+            )
+
+        db.set_access(user_id, "rejected")
+
+        try:
+            await callback.bot.send_message(
+                user_id,
+                "❌ <b>تم رفض طلب الاشتراك.</b>\n\n"
+                "للاستفسار تواصل مع المطور @SSSTlF",
+                reply_markup=paid_menu(),
+            )
+        except Exception as error:
+            print(f"Reject notification error: {error}")
+
+        await callback.message.edit_text(
+            f"❌ <b>تم رفض الطلب.</b>\n\n"
+            f"المستخدم: <code>{user_id}</code>",
+        )
+
+        await callback.answer("تم الرفض.")
+
 
     # ========================================================
     # LOGIN MENU
@@ -506,9 +704,9 @@ def setup(dp, db, pm, sessions, owner):
         state: FSMContext,
     ):
 
-        if callback.from_user.id != owner:
+        if not has_access(callback.from_user, owner, db):
             return await callback.answer(
-                "غير مصرح",
+                "💳 هذه الخدمة مدفوعة. راسل المطور @SSSTlF",
                 show_alert=True,
             )
 
@@ -537,9 +735,9 @@ def setup(dp, db, pm, sessions, owner):
         state: FSMContext,
     ):
 
-        if callback.from_user.id != owner:
+        if not has_access(callback.from_user, owner, db):
             return await callback.answer(
-                "غير مصرح",
+                "💳 هذه الخدمة مدفوعة. راسل المطور @SSSTlF",
                 show_alert=True,
             )
 
@@ -1057,9 +1255,9 @@ def setup(dp, db, pm, sessions, owner):
         state: FSMContext,
     ):
 
-        if callback.from_user.id != owner:
+        if not has_access(callback.from_user, owner, db):
             return await callback.answer(
-                "غير مصرح",
+                "💳 هذه الخدمة مدفوعة. راسل المطور @SSSTlF",
                 show_alert=True,
             )
 
