@@ -962,14 +962,7 @@ def setup(dp, db, pm, sessions, owner):
 
         await state.clear()
 
-        await message.answer(
-            "✅ <b>تم التنصيب بنجاح</b>\n\n"
-            f"🆔 التنصيب: <b>{install_id}</b>\n"
-            "🟢 الحالة: يعمل",
-            reply_markup=account_menu(
-                install_id
-            ),
-        )
+        # تم إيقاف رسالة ما بعد نجاح التنصيب للمستخدم.
 
     # ========================================================
     # PHONE
@@ -1238,12 +1231,7 @@ def setup(dp, db, pm, sessions, owner):
 
         await state.clear()
 
-        await message.answer(
-            "✅ <b>تم تسجيل الدخول وتشغيل الحساب.</b>",
-            reply_markup=account_menu(
-                data["install_id"]
-            ),
-        )
+        # تم إيقاف رسالة ما بعد نجاح تسجيل الدخول للمستخدم.
 
     # ========================================================
     # LIST
