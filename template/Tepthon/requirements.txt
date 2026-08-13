@@ -1,5 +1,4 @@
-telethon==1.42.0
-python-dotenv==1.2.2
+telethon
 requests
 tabulate
 ipaddress
