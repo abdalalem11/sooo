@@ -42,8 +42,16 @@ class InstallState(StatesGroup):
 # AUTH
 # ============================================================
 
-def allowed(user, owner):
-    return user is not None and user.id == owner
+def allowed(user, owner, db):
+    if user is None:
+        return False
+    if user.id == owner:
+        return True
+    try:
+        row = db.access_request(user.id)
+        return bool(row and row["status"] == "approved")
+    except Exception:
+        return False
 
 
 async def expiration_worker(db, pm):
@@ -766,7 +774,7 @@ def setup(dp, db, pm, sessions, owner):
         state: FSMContext,
     ):
 
-        if not allowed(message.from_user, owner):
+        if not allowed(message.from_user, owner, db):
             return
 
         name = (message.text or "").strip()
@@ -806,7 +814,7 @@ def setup(dp, db, pm, sessions, owner):
         state: FSMContext,
     ):
 
-        if not allowed(message.from_user, owner):
+        if not allowed(message.from_user, owner, db):
             return
 
         try:
@@ -896,7 +904,7 @@ def setup(dp, db, pm, sessions, owner):
         state: FSMContext,
     ):
 
-        if not allowed(message.from_user, owner):
+        if not allowed(message.from_user, owner, db):
             return
 
         session_string = (
@@ -974,7 +982,7 @@ def setup(dp, db, pm, sessions, owner):
         state: FSMContext,
     ):
 
-        if not allowed(message.from_user, owner):
+        if not allowed(message.from_user, owner, db):
             return
 
         phone = (
@@ -1082,7 +1090,7 @@ def setup(dp, db, pm, sessions, owner):
         state: FSMContext,
     ):
 
-        if not allowed(message.from_user, owner):
+        if not allowed(message.from_user, owner, db):
             return
 
         code = (
@@ -1171,7 +1179,7 @@ def setup(dp, db, pm, sessions, owner):
         state: FSMContext,
     ):
 
-        if not allowed(message.from_user, owner):
+        if not allowed(message.from_user, owner, db):
             return
 
         password = (
