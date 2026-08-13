@@ -1,15 +1,17 @@
-import asyncio
+import html
 from datetime import datetime, timedelta, timezone
 
-from aiogram import Bot, Dispatcher, Router, F
+from aiogram import Router, F
 from aiogram.filters import CommandStart
 from aiogram.types import Message, CallbackQuery
 from aiogram.fsm.state import StatesGroup, State
 from aiogram.fsm.context import FSMContext
 from aiogram.utils.keyboard import InlineKeyboardBuilder
+from aiogram.exceptions import TelegramBadRequest
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
-from aiogram.exceptions import TelegramBadRequest
+from aiogram import Bot, Dispatcher
+
 from telethon.errors import SessionPasswordNeededError
 
 from config import BOT_TOKEN, OWNER_ID, API_ID, API_HASH
@@ -21,6 +23,10 @@ from manager.sessions import SessionManager
 router = Router()
 
 
+# ============================================================
+# STATES
+# ============================================================
+
 class InstallState(StatesGroup):
     waiting_name = State()
     waiting_days = State()
@@ -30,41 +36,148 @@ class InstallState(StatesGroup):
     waiting_session = State()
 
 
+# ============================================================
+# AUTH
+# ============================================================
+
 def allowed(user, owner):
     return user is not None and user.id == owner
 
 
+# ============================================================
+# MAIN MENU
+# ============================================================
+
 def main_menu():
     b = InlineKeyboardBuilder()
-    b.button(text="➕ تنصيب جديد", callback_data="new")
-    b.button(text="🔑 تنصيب عبر Session", callback_data="session_new")
-    b.button(text="📋 تنصيباتي", callback_data="list")
-    b.button(text="📊 الحالة", callback_data="status")
-    b.button(text="🔄 تحديث", callback_data="list")
-    b.adjust(2)
+
+    b.button(
+        text="💌 طلب تنصيب",
+        callback_data="install_menu",
+    )
+
+    b.button(
+        text="✅ تسجيل | LoGiN",
+        callback_data="login_menu",
+    )
+
+    b.button(
+        text="🔑 استخراج جلسة",
+        callback_data="session_info",
+    )
+
+    b.button(
+        text="💎 ميزات السورس",
+        callback_data="features",
+    )
+
+    b.button(
+        text="👨‍💻 المطور",
+        callback_data="developer",
+    )
+
+    b.button(
+        text="🔗 قناة السورس",
+        callback_data="source",
+    )
+
+    b.adjust(2, 1, 2, 1)
+
     return b.as_markup()
 
+
+# ============================================================
+# INSTALL MENU
+# ============================================================
+
+def install_menu():
+    b = InlineKeyboardBuilder()
+
+    b.button(
+        text="📱 تسجيل بالرقم",
+        callback_data="new",
+    )
+
+    b.button(
+        text="🔑 Session String",
+        callback_data="session_new",
+    )
+
+    b.button(
+        text="📋 تنصيباتي",
+        callback_data="list",
+    )
+
+    b.button(
+        text="⬅️ رجوع",
+        callback_data="home",
+    )
+
+    b.adjust(2, 1, 1)
+
+    return b.as_markup()
+
+
+# ============================================================
+# ACCOUNT MENU
+# ============================================================
 
 def account_menu(iid):
     b = InlineKeyboardBuilder()
-    b.button(text="▶️ تشغيل", callback_data=f"start:{iid}")
-    b.button(text="⛔ إيقاف", callback_data=f"stop:{iid}")
-    b.button(text="🔄 إعادة تشغيل", callback_data=f"restart:{iid}")
-    b.button(text="📄 السجل", callback_data=f"log:{iid}")
-    b.button(text="🗑 حذف", callback_data=f"delete:{iid}")
-    b.button(text="⬅️ رجوع", callback_data="list")
+
+    b.button(
+        text="▶️ تشغيل",
+        callback_data=f"start:{iid}",
+    )
+
+    b.button(
+        text="⛔ إيقاف",
+        callback_data=f"stop:{iid}",
+    )
+
+    b.button(
+        text="🔄 إعادة تشغيل",
+        callback_data=f"restart:{iid}",
+    )
+
+    b.button(
+        text="📄 السجل",
+        callback_data=f"log:{iid}",
+    )
+
+    b.button(
+        text="🗑 حذف التنصيب",
+        callback_data=f"delete:{iid}",
+    )
+
+    b.button(
+        text="⬅️ رجوع",
+        callback_data="list",
+    )
+
     b.adjust(2, 2, 1, 1)
+
     return b.as_markup()
 
 
-def back_menu():
+def back_home():
     b = InlineKeyboardBuilder()
-    b.button(text="⬅️ الرئيسية", callback_data="home")
+
+    b.button(
+        text="⬅️ الرئيسية",
+        callback_data="home",
+    )
+
     return b.as_markup()
 
+
+# ============================================================
+# FORMAT ACCOUNT
+# ============================================================
 
 def format_install(row):
     status = row.get("status", "stopped")
+
     status_text = {
         "running": "🟢 يعمل",
         "stopped": "🔴 متوقف",
@@ -73,42 +186,69 @@ def format_install(row):
 
     if row.get("unlimited"):
         expiry = "♾️ غير محدود"
+
     elif row.get("expires_at"):
         dt = datetime.fromtimestamp(
             row["expires_at"],
             timezone.utc,
         )
-        expiry = dt.strftime("%Y-%m-%d %H:%M UTC")
+
+        expiry = dt.strftime(
+            "%Y-%m-%d %H:%M UTC"
+        )
+
     else:
         expiry = "غير محدد"
 
     return (
         f"🆔 <b>{row['id']}</b>\n"
-        f"📦 <b>{row['name']}</b>\n"
+        f"📦 <b>{html.escape(str(row['name']))}</b>\n"
         f"📡 الحالة: {status_text}\n"
         f"📅 الانتهاء: {expiry}\n"
     )
 
 
+# ============================================================
+# SETUP
+# ============================================================
+
 def setup(dp, db, pm, sessions, owner):
+
     dp.include_router(router)
+
+    # ========================================================
+    # START
+    # ========================================================
 
     @router.message(CommandStart())
     async def start(message: Message):
+
         if not allowed(message.from_user, owner):
             return await message.answer(
                 "⛔ غير مصرح لك باستخدام هذا البوت."
             )
 
-        await message.answer(
+        text = (
             "🤖 <b>Tepthon Factory</b>\n\n"
-            "مرحبًا بك في مصنع Tepthon.\n"
-            "اختر العملية المطلوبة:",
+            "⌁ مرحباً بك عزيزي في مصنع Tepthon\n\n"
+            "⌁ اختر الخدمة المطلوبة من الأزرار بالأسفل."
+        )
+
+        await message.answer(
+            text,
             reply_markup=main_menu(),
         )
 
+    # ========================================================
+    # HOME
+    # ========================================================
+
     @router.callback_query(F.data == "home")
-    async def home(callback: CallbackQuery, state: FSMContext):
+    async def home(
+        callback: CallbackQuery,
+        state: FSMContext,
+    ):
+
         if callback.from_user.id != owner:
             return await callback.answer(
                 "غير مصرح",
@@ -117,97 +257,272 @@ def setup(dp, db, pm, sessions, owner):
 
         await state.clear()
 
-        await callback.message.edit_text(
+        text = (
             "🤖 <b>Tepthon Factory</b>\n\n"
-            "اختر العملية المطلوبة:",
-            reply_markup=main_menu(),
+            "⌁ مرحباً بك عزيزي في مصنع Tepthon\n\n"
+            "⌁ اختر الخدمة المطلوبة من الأزرار بالأسفل."
+        )
+
+        try:
+            await callback.message.edit_text(
+                text,
+                reply_markup=main_menu(),
+            )
+        except TelegramBadRequest:
+            pass
+
+        await callback.answer()
+
+    # ========================================================
+    # INSTALL MENU
+    # ========================================================
+
+    @router.callback_query(F.data == "install_menu")
+    async def install_menu_handler(
+        callback: CallbackQuery,
+    ):
+
+        if callback.from_user.id != owner:
+            return await callback.answer(
+                "غير مصرح",
+                show_alert=True,
+            )
+
+        await callback.message.edit_text(
+            "💌 <b>طلب تنصيب</b>\n\n"
+            "اختر طريقة تسجيل الحساب:",
+            reply_markup=install_menu(),
         )
 
         await callback.answer()
+
+    # ========================================================
+    # LOGIN MENU
+    # ========================================================
+
+    @router.callback_query(F.data == "login_menu")
+    async def login_menu_handler(
+        callback: CallbackQuery,
+    ):
+
+        if callback.from_user.id != owner:
+            return await callback.answer(
+                "غير مصرح",
+                show_alert=True,
+            )
+
+        rows = db.user(owner)
+
+        if not rows:
+            return await callback.message.edit_text(
+                "✅ <b>تسجيل | LoGiN</b>\n\n"
+                "لا توجد حسابات مسجلة حاليًا.",
+                reply_markup=install_menu(),
+            )
+
+        text = (
+            "✅ <b>تسجيل | LoGiN</b>\n\n"
+            "اختر الحساب الذي تريد إدارته:"
+        )
+
+        b = InlineKeyboardBuilder()
+
+        for row in rows:
+            b.button(
+                text=f"📦 {row['name']} #{row['id']}",
+                callback_data=f"account:{row['id']}",
+            )
+
+        b.button(
+            text="⬅️ رجوع",
+            callback_data="home",
+        )
+
+        b.adjust(1)
+
+        await callback.message.edit_text(
+            text,
+            reply_markup=b.as_markup(),
+        )
+
+        await callback.answer()
+
+    # ========================================================
+    # SESSION INFO
+    # ========================================================
+
+    @router.callback_query(F.data == "session_info")
+    async def session_info(
+        callback: CallbackQuery,
+    ):
+
+        if callback.from_user.id != owner:
+            return await callback.answer(
+                "غير مصرح",
+                show_alert=True,
+            )
+
+        await callback.message.edit_text(
+            "🔑 <b>استخراج جلسة</b>\n\n"
+            "يمكنك استخدام Session String لحسابك "
+            "عن طريق خيار <b>طلب تنصيب → Session String</b>.\n\n"
+            "⚠️ لا ترسل Session String لأي شخص آخر.",
+            reply_markup=back_home(),
+        )
+
+        await callback.answer()
+
+    # ========================================================
+    # FEATURES
+    # ========================================================
+
+    @router.callback_query(F.data == "features")
+    async def features(
+        callback: CallbackQuery,
+    ):
+
+        if callback.from_user.id != owner:
+            return await callback.answer(
+                "غير مصرح",
+                show_alert=True,
+            )
+
+        await callback.message.edit_text(
+            "💎 <b>ميزات السورس</b>\n\n"
+            "▫️ تشغيل Tepthon\n"
+            "▫️ إيقاف الحساب\n"
+            "▫️ إعادة التشغيل\n"
+            "▫️ تسجيل الدخول بالرقم\n"
+            "▫️ دعم Session String\n"
+            "▫️ إدارة عدة تنصيبات\n"
+            "▫️ عرض سجل التشغيل\n"
+            "▫️ حذف التنصيب\n"
+            "▫️ تحديد مدة الاشتراك\n"
+            "▫️ اشتراك غير محدود",
+            reply_markup=back_home(),
+        )
+
+        await callback.answer()
+
+    # ========================================================
+    # DEVELOPER
+    # ========================================================
+
+    @router.callback_query(F.data == "developer")
+    async def developer(
+        callback: CallbackQuery,
+    ):
+
+        if callback.from_user.id != owner:
+            return await callback.answer(
+                "غير مصرح",
+                show_alert=True,
+            )
+
+        await callback.message.edit_text(
+            "👨‍💻 <b>المطور</b>\n\n"
+            "⌁ Tepthon Factory\n"
+            "⌁ إدارة وتنصيب وتشغيل الحسابات",
+            reply_markup=back_home(),
+        )
+
+        await callback.answer()
+
+    # ========================================================
+    # SOURCE
+    # ========================================================
+
+    @router.callback_query(F.data == "source")
+    async def source(
+        callback: CallbackQuery,
+    ):
+
+        if callback.from_user.id != owner:
+            return await callback.answer(
+                "غير مصرح",
+                show_alert=True,
+            )
+
+        await callback.message.edit_text(
+            "🔗 <b>قناة السورس</b>\n\n"
+            "أضف رابط قناة السورس هنا.",
+            reply_markup=back_home(),
+        )
+
+        await callback.answer()
+
+    # ========================================================
+    # NEW PHONE INSTALL
+    # ========================================================
 
     @router.callback_query(F.data == "new")
     async def new_install(
         callback: CallbackQuery,
         state: FSMContext,
     ):
+
         if callback.from_user.id != owner:
             return await callback.answer(
                 "غير مصرح",
                 show_alert=True,
             )
+
+        await state.update_data(
+            install_mode="phone"
+        )
 
         await state.set_state(
             InstallState.waiting_name
         )
 
         await callback.message.answer(
-            "➕ <b>تنصيب جديد</b>\n\n"
+            "📱 <b>تسجيل حساب جديد</b>\n\n"
             "أرسل اسم التنصيب:"
         )
 
         await callback.answer()
+
+    # ========================================================
+    # SESSION INSTALL
+    # ========================================================
 
     @router.callback_query(F.data == "session_new")
     async def session_new(
         callback: CallbackQuery,
         state: FSMContext,
     ):
+
         if callback.from_user.id != owner:
             return await callback.answer(
                 "غير مصرح",
                 show_alert=True,
             )
 
+        await state.update_data(
+            install_mode="session"
+        )
+
         await state.set_state(
-            InstallState.waiting_session
+            InstallState.waiting_name
         )
 
         await callback.message.answer(
-            "🔑 <b>تنصيب عبر Session String</b>\\n\\n"
-            "أرسل Session String الخاصة بحساب Telegram."
+            "🔑 <b>تنصيب عبر Session String</b>\n\n"
+            "أرسل اسم التنصيب:"
         )
 
         await callback.answer()
 
-
-    @router.message(InstallState.waiting_session)
-    async def get_session(
-        message: Message,
-        state: FSMContext,
-    ):
-        if not allowed(message.from_user, owner):
-            return
-
-        session_string = (message.text or "").strip()
-
-        if not session_string:
-            return await message.answer(
-                "❌ أرسل Session String صحيحة."
-            )
-
-        await message.answer(
-            "⏳ جاري التحقق من Session String..."
-        )
-
-        try:
-            # سيتم ربطها بإنشاء التنصيب في الخطوة التالية
-            await state.clear()
-
-            await message.answer(
-                "✅ تم استلام Session String بنجاح."
-            )
-
-        except Exception as error:
-            await message.answer(
-                f"❌ فشل التحقق:\\n<code>{error}</code>"
-            )
-
+    # ========================================================
+    # NAME
+    # ========================================================
 
     @router.message(InstallState.waiting_name)
     async def get_name(
         message: Message,
         state: FSMContext,
     ):
+
         if not allowed(message.from_user, owner):
             return
 
@@ -223,27 +538,39 @@ def setup(dp, db, pm, sessions, owner):
                 "❌ الاسم طويل جدًا، الحد الأقصى 50 حرفًا."
             )
 
-        await state.update_data(name=name)
+        await state.update_data(
+            name=name
+        )
+
         await state.set_state(
             InstallState.waiting_days
         )
 
         await message.answer(
-            "📅 أرسل مدة التنصيب بالأيام.\n\n"
+            "📅 <b>مدة التنصيب</b>\n\n"
+            "أرسل عدد الأيام.\n\n"
             "مثال: <code>30</code>\n"
-            "أو أرسل <code>0</code> للتنصيب غير المحدود."
+            "أو <code>0</code> للتنصيب غير المحدود."
         )
+
+    # ========================================================
+    # DAYS
+    # ========================================================
 
     @router.message(InstallState.waiting_days)
     async def get_days(
         message: Message,
         state: FSMContext,
     ):
+
         if not allowed(message.from_user, owner):
             return
 
         try:
-            days = int((message.text or "").strip())
+            days = int(
+                (message.text or "").strip()
+            )
+
         except ValueError:
             return await message.answer(
                 "❌ أرسل رقمًا صحيحًا."
@@ -255,7 +582,12 @@ def setup(dp, db, pm, sessions, owner):
             )
 
         data = await state.get_data()
+
         name = data["name"]
+        install_mode = data.get(
+            "install_mode",
+            "phone",
+        )
 
         unlimited = days == 0
 
@@ -279,33 +611,139 @@ def setup(dp, db, pm, sessions, owner):
 
         except Exception as error:
             return await message.answer(
-                f"❌ فشل إنشاء التنصيب:\n<code>{error}</code>"
+                "❌ فشل إنشاء التنصيب:\n"
+                f"<code>{html.escape(str(error))}</code>"
             )
 
         await state.update_data(
             install_id=install_id
         )
 
+        if install_mode == "session":
+
+            await state.set_state(
+                InstallState.waiting_session
+            )
+
+            return await message.answer(
+                f"✅ تم إنشاء التنصيب رقم "
+                f"<b>{install_id}</b>.\n\n"
+                "🔑 أرسل الآن Session String."
+            )
+
         await state.set_state(
             InstallState.waiting_phone
         )
 
         await message.answer(
-            f"✅ تم إنشاء التنصيب رقم <b>{install_id}</b>.\n\n"
-            "📱 الآن أرسل رقم الهاتف مع مفتاح الدولة.\n"
+            f"✅ تم إنشاء التنصيب رقم "
+            f"<b>{install_id}</b>.\n\n"
+            "📱 أرسل رقم الهاتف مع مفتاح الدولة.\n"
             "مثال:\n"
             "<code>+9665XXXXXXXX</code>"
         )
+
+    # ========================================================
+    # SESSION STRING
+    # ========================================================
+
+    @router.message(InstallState.waiting_session)
+    async def get_session(
+        message: Message,
+        state: FSMContext,
+    ):
+
+        if not allowed(message.from_user, owner):
+            return
+
+        session_string = (
+            message.text or ""
+        ).strip()
+
+        if not session_string:
+            return await message.answer(
+                "❌ أرسل Session String صحيحة."
+            )
+
+        data = await state.get_data()
+
+        install_id = data.get(
+            "install_id"
+        )
+
+        if not install_id:
+            await state.clear()
+
+            return await message.answer(
+                "❌ لم يتم العثور على التنصيب."
+            )
+
+        await message.answer(
+            "⏳ <b>جاري التحقق من Session...</b>"
+        )
+
+        try:
+
+            target = await sessions.install_string_session(
+                install_id,
+                session_string,
+                API_ID,
+                API_HASH,
+            )
+
+            db.session(
+                install_id,
+                target,
+            )
+
+            pm.start(install_id)
+
+            db.status(
+                install_id,
+                "running",
+            )
+
+        except Exception as error:
+
+            db.status(
+                install_id,
+                "error",
+            )
+
+            await state.clear()
+
+            return await message.answer(
+                "❌ <b>فشل التنصيب</b>\n\n"
+                f"<code>{html.escape(str(error))}</code>"
+            )
+
+        await state.clear()
+
+        await message.answer(
+            "✅ <b>تم التنصيب بنجاح</b>\n\n"
+            f"🆔 التنصيب: <b>{install_id}</b>\n"
+            "🟢 الحالة: يعمل",
+            reply_markup=account_menu(
+                install_id
+            ),
+        )
+
+    # ========================================================
+    # PHONE
+    # ========================================================
 
     @router.message(InstallState.waiting_phone)
     async def get_phone(
         message: Message,
         state: FSMContext,
     ):
+
         if not allowed(message.from_user, owner):
             return
 
-        phone = (message.text or "").strip()
+        phone = (
+            message.text or ""
+        ).strip()
 
         if not phone.startswith("+"):
             return await message.answer(
@@ -313,43 +751,53 @@ def setup(dp, db, pm, sessions, owner):
             )
 
         data = await state.get_data()
-        install_id = data["install_id"]
 
         try:
+
             await sessions.send_code(
                 phone,
                 API_ID,
                 API_HASH,
             )
+
         except Exception as error:
+
             return await message.answer(
                 "❌ فشل إرسال كود Telegram:\n"
-                f"<code>{error}</code>"
+                f"<code>{html.escape(str(error))}</code>"
             )
 
-        await state.update_data(phone=phone)
+        await state.update_data(
+            phone=phone
+        )
+
         await state.set_state(
             InstallState.waiting_code
         )
 
         b = InlineKeyboardBuilder()
+
         b.button(
             text="🔄 إعادة إرسال الكود",
-            callback_data="resend_code"
+            callback_data="resend_code",
         )
 
         await message.answer(
-            "📨 تم إرسال كود Telegram.\n\n"
-            "أرسل الكود كما وصلك.\n"
-            "إذا انتهت صلاحيته، اضغط إعادة إرسال الكود.",
+            "📨 <b>تم إرسال الكود.</b>\n\n"
+            "أرسل كود Telegram.",
             reply_markup=b.as_markup(),
         )
+
+    # ========================================================
+    # RESEND
+    # ========================================================
 
     @router.callback_query(F.data == "resend_code")
     async def resend_code(
         callback: CallbackQuery,
         state: FSMContext,
     ):
+
         if callback.from_user.id != owner:
             return await callback.answer(
                 "غير مصرح",
@@ -357,52 +805,58 @@ def setup(dp, db, pm, sessions, owner):
             )
 
         data = await state.get_data()
+
         phone = data.get("phone")
 
         if not phone:
             return await callback.answer(
-                "❌ رقم الهاتف غير موجود. ابدأ التنصيب من جديد.",
+                "❌ رقم الهاتف غير موجود.",
                 show_alert=True,
             )
 
         try:
-            await sessions.resend_code(phone)
 
-            await callback.message.answer(
-                "📨 <b>تم إرسال كود جديد.</b>\\n\\n"
-                "استخدم الكود الجديد فقط."
+            await sessions.resend_code(
+                phone
             )
 
-            await callback.answer("✅ تم إرسال كود جديد")
+            await callback.answer(
+                "✅ تم إرسال كود جديد."
+            )
+
+            await callback.message.answer(
+                "📨 <b>تم إرسال كود جديد.</b>\n\n"
+                "استخدم آخر كود وصلك."
+            )
 
         except Exception as error:
-            error_text = str(error)
-
-            if "SendCodeUnavailableError" in error_text:
-                return await callback.answer(
-                    "⚠️ Telegram لا يسمح بإرسال كود جديد لهذا الرقم حالياً. حاول لاحقاً أو ابدأ تسجيل الدخول من جديد.",
-                    show_alert=True,
-                )
 
             await callback.answer(
-                "❌ تعذر إعادة إرسال الكود. حاول مرة أخرى لاحقاً.",
+                "❌ تعذر إرسال الكود.",
                 show_alert=True,
             )
 
+    # ========================================================
+    # CODE
+    # ========================================================
 
     @router.message(InstallState.waiting_code)
     async def get_code(
         message: Message,
         state: FSMContext,
     ):
+
         if not allowed(message.from_user, owner):
             return
 
-        code = (message.text or "").replace(" ", "").strip()
+        code = (
+            message.text or ""
+        ).replace(" ", "").strip()
 
         data = await state.get_data()
 
         try:
+
             target = await sessions.login_code(
                 data["install_id"],
                 data["phone"],
@@ -412,6 +866,7 @@ def setup(dp, db, pm, sessions, owner):
             )
 
         except SessionPasswordNeededError:
+
             await state.set_state(
                 InstallState.waiting_password
             )
@@ -422,9 +877,10 @@ def setup(dp, db, pm, sessions, owner):
             )
 
         except Exception as error:
+
             return await message.answer(
                 "❌ فشل تسجيل الدخول:\n"
-                f"<code>{error}</code>"
+                f"<code>{html.escape(str(error))}</code>"
             )
 
         db.session(
@@ -434,45 +890,62 @@ def setup(dp, db, pm, sessions, owner):
         )
 
         try:
-            pm.start(data["install_id"])
+
+            pm.start(
+                data["install_id"]
+            )
+
             db.status(
                 data["install_id"],
                 "running",
             )
+
         except Exception as error:
+
             db.status(
                 data["install_id"],
                 "error",
             )
+
             await state.clear()
 
             return await message.answer(
                 "⚠️ تم حفظ الجلسة، لكن فشل تشغيل السورس:\n"
-                f"<code>{error}</code>"
+                f"<code>{html.escape(str(error))}</code>"
             )
 
         await state.clear()
 
         await message.answer(
-            "✅ <b>تم تسجيل الحساب وتشغيل Tepthon بنجاح.</b>\n\n"
-            f"🆔 رقم التنصيب: <b>{data['install_id']}</b>",
+            "✅ <b>تم تسجيل الحساب وتشغيل Tepthon.</b>\n\n"
+            f"🆔 التنصيب: "
+            f"<b>{data['install_id']}</b>",
             reply_markup=account_menu(
                 data["install_id"]
             ),
         )
+
+    # ========================================================
+    # PASSWORD
+    # ========================================================
 
     @router.message(InstallState.waiting_password)
     async def get_password(
         message: Message,
         state: FSMContext,
     ):
+
         if not allowed(message.from_user, owner):
             return
 
-        password = message.text or ""
+        password = (
+            message.text or ""
+        )
+
         data = await state.get_data()
 
         try:
+
             target = await sessions.login_code(
                 data["install_id"],
                 data["phone"],
@@ -483,9 +956,10 @@ def setup(dp, db, pm, sessions, owner):
             )
 
         except Exception as error:
+
             return await message.answer(
                 "❌ كلمة المرور غير صحيحة أو فشل تسجيل الدخول:\n"
-                f"<code>{error}</code>"
+                f"<code>{html.escape(str(error))}</code>"
             )
 
         db.session(
@@ -495,37 +969,49 @@ def setup(dp, db, pm, sessions, owner):
         )
 
         try:
-            pm.start(data["install_id"])
+
+            pm.start(
+                data["install_id"]
+            )
+
             db.status(
                 data["install_id"],
                 "running",
             )
+
         except Exception as error:
+
             db.status(
                 data["install_id"],
                 "error",
             )
+
             await state.clear()
 
             return await message.answer(
-                "⚠️ تم حفظ الجلسة، لكن فشل تشغيل السورس:\n"
-                f"<code>{error}</code>"
+                "⚠️ تم حفظ الجلسة، لكن فشل التشغيل:\n"
+                f"<code>{html.escape(str(error))}</code>"
             )
 
         await state.clear()
 
         await message.answer(
-            "✅ <b>تم تسجيل الدخول وتشغيل الحساب بنجاح.</b>",
+            "✅ <b>تم تسجيل الدخول وتشغيل الحساب.</b>",
             reply_markup=account_menu(
                 data["install_id"]
             ),
         )
+
+    # ========================================================
+    # LIST
+    # ========================================================
 
     @router.callback_query(F.data == "list")
     async def list_installs(
         callback: CallbackQuery,
         state: FSMContext,
     ):
+
         if callback.from_user.id != owner:
             return await callback.answer(
                 "غير مصرح",
@@ -537,56 +1023,93 @@ def setup(dp, db, pm, sessions, owner):
         rows = db.user(owner)
 
         if not rows:
+
             return await callback.message.edit_text(
                 "📋 <b>تنصيباتك</b>\n\n"
                 "لا توجد تنصيبات حاليًا.",
-                reply_markup=main_menu(),
+                reply_markup=install_menu(),
             )
 
-        text = "📋 <b>تنصيباتك:</b>\n\n"
+        text = (
+            "📋 <b>تنصيباتك</b>\n\n"
+        )
 
         b = InlineKeyboardBuilder()
 
         for row in rows:
-            text += format_install(row) + "\n"
+
+            text += (
+                format_install(row)
+                + "\n"
+            )
+
             b.button(
-                text=f"📦 {row['name']} #{row['id']}",
-                callback_data=f"account:{row['id']}",
+                text=(
+                    f"📦 {row['name']} "
+                    f"#{row['id']}"
+                ),
+                callback_data=(
+                    f"account:{row['id']}"
+                ),
             )
 
         b.button(
-            text="⬅️ الرئيسية",
-            callback_data="home",
+            text="⬅️ رجوع",
+            callback_data="install_menu",
         )
+
         b.adjust(1)
 
         try:
+
             await callback.message.edit_text(
                 text,
                 reply_markup=b.as_markup(),
             )
+
         except TelegramBadRequest as error:
+
             if "message is not modified" not in str(error):
                 raise
 
-        await callback.answer("✅ تم تحديث القائمة")
+        await callback.answer()
 
-    @router.callback_query(F.data.startswith("account:"))
+    # ========================================================
+    # ACCOUNT
+    # ========================================================
+
+    @router.callback_query(
+        F.data.startswith("account:")
+    )
     async def account(
         callback: CallbackQuery,
     ):
+
         if callback.from_user.id != owner:
             return await callback.answer(
                 "غير مصرح",
                 show_alert=True,
             )
 
-        iid = int(callback.data.split(":")[1])
+        try:
+
+            iid = int(
+                callback.data.split(":")[1]
+            )
+
+        except (ValueError, IndexError):
+
+            return await callback.answer(
+                "❌ رقم غير صحيح.",
+                show_alert=True,
+            )
+
         row = db.get(iid)
 
         if not row or row["user_id"] != owner:
+
             return await callback.answer(
-                "التنصيب غير موجود.",
+                "❌ التنصيب غير موجود.",
                 show_alert=True,
             )
 
@@ -598,90 +1121,159 @@ def setup(dp, db, pm, sessions, owner):
 
         await callback.answer()
 
-    @router.callback_query(F.data.startswith("start:"))
-    async def start_account(callback: CallbackQuery):
+    # ========================================================
+    # START
+    # ========================================================
+
+    @router.callback_query(
+        F.data.startswith("start:")
+    )
+    async def start_account(
+        callback: CallbackQuery,
+    ):
+
         if callback.from_user.id != owner:
             return await callback.answer(
                 "غير مصرح",
                 show_alert=True,
             )
 
-        iid = int(callback.data.split(":")[1])
+        iid = int(
+            callback.data.split(":")[1]
+        )
+
         row = db.get(iid)
 
         if not row or row["user_id"] != owner:
+
             return await callback.answer(
-                "التنصيب غير موجود.",
+                "❌ التنصيب غير موجود.",
                 show_alert=True,
             )
 
         try:
+
             pm.start(iid)
-            db.status(iid, "running")
+
+            db.status(
+                iid,
+                "running",
+            )
 
             await callback.answer(
-                "✅ تم التشغيل."
+                "🟢 تم التشغيل."
             )
 
         except Exception as error:
-            db.status(iid, "error")
+
+            db.status(
+                iid,
+                "error",
+            )
+
             await callback.answer(
                 f"❌ {error}",
                 show_alert=True,
             )
 
-    @router.callback_query(F.data.startswith("stop:"))
-    async def stop_account(callback: CallbackQuery):
+    # ========================================================
+    # STOP
+    # ========================================================
+
+    @router.callback_query(
+        F.data.startswith("stop:")
+    )
+    async def stop_account(
+        callback: CallbackQuery,
+    ):
+
         if callback.from_user.id != owner:
             return await callback.answer(
                 "غير مصرح",
                 show_alert=True,
             )
 
-        iid = int(callback.data.split(":")[1])
+        iid = int(
+            callback.data.split(":")[1]
+        )
 
         try:
+
             pm.stop(iid)
-            db.status(iid, "stopped")
+
+            db.status(
+                iid,
+                "stopped",
+            )
 
             await callback.answer(
                 "⛔ تم الإيقاف."
             )
 
         except Exception as error:
+
             await callback.answer(
                 f"❌ {error}",
                 show_alert=True,
             )
 
-    @router.callback_query(F.data.startswith("restart:"))
-    async def restart_account(callback: CallbackQuery):
+    # ========================================================
+    # RESTART
+    # ========================================================
+
+    @router.callback_query(
+        F.data.startswith("restart:")
+    )
+    async def restart_account(
+        callback: CallbackQuery,
+    ):
+
         if callback.from_user.id != owner:
             return await callback.answer(
                 "غير مصرح",
                 show_alert=True,
             )
 
-        iid = int(callback.data.split(":")[1])
+        iid = int(
+            callback.data.split(":")[1]
+        )
 
         try:
+
             pm.restart(iid)
-            db.status(iid, "running")
+
+            db.status(
+                iid,
+                "running",
+            )
 
             await callback.answer(
                 "🔄 تمت إعادة التشغيل."
             )
 
         except Exception as error:
-            db.status(iid, "error")
+
+            db.status(
+                iid,
+                "error",
+            )
 
             await callback.answer(
                 f"❌ {error}",
                 show_alert=True,
             )
 
-    @router.callback_query(F.data.startswith("log:"))
-    async def log_account(callback: CallbackQuery):
+    # ========================================================
+    # LOG
+    # ========================================================
+
+    @router.callback_query(
+        F.data.startswith("log:")
+    )
+    async def log_account(
+        callback: CallbackQuery,
+    ):
+
         if callback.from_user.id != owner:
             return await callback.answer(
                 "غير مصرح",
@@ -689,76 +1281,115 @@ def setup(dp, db, pm, sessions, owner):
             )
 
         try:
-            iid = int(callback.data.split(":")[1])
+
+            iid = int(
+                callback.data.split(":")[1]
+            )
+
         except (ValueError, IndexError):
+
             return await callback.answer(
                 "❌ رقم التنصيب غير صحيح.",
                 show_alert=True,
             )
 
-        # إغلاق نافذة الزر مباشرة حتى لا يظهر وكأنه معلق
-        await callback.answer("📄 جاري جلب السجل...")
+        row = db.get(iid)
+
+        if not row or row["user_id"] != owner:
+
+            return await callback.answer(
+                "❌ التنصيب غير موجود.",
+                show_alert=True,
+            )
+
+        await callback.answer(
+            "📄 جاري جلب السجل..."
+        )
 
         try:
+
             text = pm.log(iid)
 
             if not text:
-                text = "📄 لا يوجد سجل حتى الآن."
+                text = "لا يوجد سجل حتى الآن."
 
-            # حماية رسالة Telegram من الأحرف الخاصة في HTML
-            from html import escape
-            text = escape(text)
+            text = html.escape(text)
 
             if len(text) > 3500:
                 text = text[-3500:]
 
             await callback.message.answer(
                 f"📄 <b>سجل التنصيب #{iid}</b>\n\n"
-                f"<pre>{text}</pre>"
+                f"<pre>{text}</pre>",
             )
 
         except Exception as error:
+
             await callback.message.answer(
                 "❌ تعذر قراءة سجل التنصيب.\n\n"
-                f"<code>{escape(str(error))}</code>"
+                f"<code>{html.escape(str(error))}</code>"
             )
 
-    @router.callback_query(F.data.startswith("delete:"))
-    async def delete_account(callback: CallbackQuery):
+    # ========================================================
+    # DELETE
+    # ========================================================
+
+    @router.callback_query(
+        F.data.startswith("delete:")
+    )
+    async def delete_account(
+        callback: CallbackQuery,
+    ):
+
         if callback.from_user.id != owner:
             return await callback.answer(
                 "غير مصرح",
                 show_alert=True,
             )
 
-        iid = int(callback.data.split(":")[1])
+        iid = int(
+            callback.data.split(":")[1]
+        )
+
         row = db.get(iid)
 
         if not row or row["user_id"] != owner:
+
             return await callback.answer(
-                "التنصيب غير موجود.",
+                "❌ التنصيب غير موجود.",
                 show_alert=True,
             )
 
         try:
+
             pm.delete(iid)
+
             db.delete(iid)
 
             await callback.message.edit_text(
-                "🗑 <b>تم حذف التنصيب بنجاح.</b>",
+                "🗑 <b>تم حذف التنصيب بنجاح.</b>\n\n"
+                "تم إيقاف الحساب وحذف ملفاته.",
                 reply_markup=main_menu(),
             )
 
             await callback.answer()
 
         except Exception as error:
+
             await callback.answer(
                 f"❌ فشل الحذف: {error}",
                 show_alert=True,
             )
 
+    # ========================================================
+    # STATUS
+    # ========================================================
+
     @router.callback_query(F.data == "status")
-    async def status(callback: CallbackQuery):
+    async def status(
+        callback: CallbackQuery,
+    ):
+
         if callback.from_user.id != owner:
             return await callback.answer(
                 "غير مصرح",
@@ -768,18 +1399,17 @@ def setup(dp, db, pm, sessions, owner):
         rows = db.user(owner)
 
         running = sum(
-            1 for x in rows
+            1
+            for x in rows
             if x["status"] == "running"
         )
 
-        stopped = sum(
-            1 for x in rows
-            if x["status"] != "running"
-        )
+        stopped = len(rows) - running
 
         await callback.message.edit_text(
             "📊 <b>حالة المصنع</b>\n\n"
-            f"📦 إجمالي التنصيبات: <b>{len(rows)}</b>\n"
+            f"📦 إجمالي التنصيبات: "
+            f"<b>{len(rows)}</b>\n"
             f"🟢 تعمل: <b>{running}</b>\n"
             f"🔴 متوقفة/خطأ: <b>{stopped}</b>",
             reply_markup=main_menu(),
@@ -788,7 +1418,12 @@ def setup(dp, db, pm, sessions, owner):
         await callback.answer()
 
 
+# ============================================================
+# MAIN
+# ============================================================
+
 async def main():
+
     if not BOT_TOKEN:
         raise RuntimeError(
             "BOT_TOKEN غير موجود في Environment Variables."
@@ -799,7 +1434,19 @@ async def main():
             "OWNER_ID غير موجود في Environment Variables."
         )
 
-    db = Database("data/factory.db")
+    if not API_ID:
+        raise RuntimeError(
+            "API_ID غير موجود في Environment Variables."
+        )
+
+    if not API_HASH:
+        raise RuntimeError(
+            "API_HASH غير موجود في Environment Variables."
+        )
+
+    db = Database(
+        "data/factory.db"
+    )
 
     pm = ProcessManager(
         "template/Tepthon",
@@ -827,14 +1474,20 @@ async def main():
         OWNER_ID,
     )
 
-    print("================================")
+    print("==============================")
     print(" Tepthon Factory")
     print(" Database: OK")
     print(" Sessions: OK")
-    print(" Permissions: OK")
-    print("================================")
+    print(" Process Manager: OK")
+    print(" Bot: OK")
+    print("==============================")
 
     try:
+
         await dp.start_polling(bot)
+
     finally:
+
+        await sessions.close()
+
         await bot.session.close()
