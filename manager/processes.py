@@ -41,6 +41,13 @@ class ProcessManager:
 
         package = directory / "Tepthon"
 
+        session_path = directory / "session"
+        if not session_path.exists():
+            raise RuntimeError(
+                f"Session غير موجودة للحساب {install_id}. "
+                "سجّل الدخول أولاً من المصنع."
+            )
+
         if not package.exists():
             raise RuntimeError(
                 f"Tepthon package not found: {package}"
@@ -60,6 +67,8 @@ class ProcessManager:
 
         session_path = directory / "session"
         env["SESSION"] = str(session_path.absolute())
+        env["REDISHOST"] = os.getenv("REDISHOST", "127.0.0.1")
+        env["REDISPORT"] = os.getenv("REDISPORT", "6379")
 
         # PORT مخصص للمصنع الرئيسي على Render
         env.pop("PORT", None)

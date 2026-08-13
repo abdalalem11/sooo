@@ -139,13 +139,13 @@ class SessionManager:
         target = self.session_file(install_id)
         Path(target).parent.mkdir(parents=True, exist_ok=True)
 
-        # إنشاء SQLite session مستقلة للحساب
+        # استخراج Session SQLite صحيحة من جلسة Telegram الحالية
         sqlite_session = SQLiteSession(target)
 
         sqlite_session.set_dc(
             client.session.dc_id,
             client.session.server_address,
-            client.session.port
+            client.session.port,
         )
 
         sqlite_session.auth_key = client.session.auth_key
@@ -154,6 +154,11 @@ class SessionManager:
             sqlite_session.takeout_id = client.session.takeout_id
 
         sqlite_session.save()
+
+        # التأكد أن الملف تم إنشاؤه فعلاً
+        if not Path(target).exists():
+            await client.disconnect()
+            raise RuntimeError("فشل إنشاء ملف Session للحساب.")
 
         await client.disconnect()
 
