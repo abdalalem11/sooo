@@ -2,7 +2,12 @@ import shutil
 from pathlib import Path
 
 from telethon import TelegramClient
-from telethon.errors import SessionPasswordNeededError
+from telethon.errors import (
+    SessionPasswordNeededError,
+    PhoneCodeExpiredError,
+    PhoneCodeInvalidError,
+    SendCodeUnavailableError,
+)
 
 
 class SessionManager:
@@ -26,7 +31,29 @@ class SessionManager:
         return directory / "session"
 
     async def send_code(self, phone, api_id, api_hash):
+        # إذا كانت هناك جلسة تحقق قديمة لنفس الرقم، أغلقها
+        old_client = self.clients.pop(phone, None)
+        self.phone_hashes.pop(phone, None)
+
+        if old_client is not None:
+            try:
+                if old_client.is_connected():
+                    await old_client.disconnect()
+            except Exception:
+                pass
+
         pending = self._pending_path(phone)
+
+        # حذف ملفات جلسة التحقق القديمة حتى لا تختلط
+        for path in (
+            pending,
+            Path(str(pending) + ".session"),
+        ):
+            try:
+                if path.exists():
+                    path.unlink()
+            except Exception:
+                pass
 
         client = TelegramClient(
             str(pending),
@@ -36,7 +63,14 @@ class SessionManager:
 
         await client.connect()
 
-        result = await client.send_code_request(phone)
+        try:
+            result = await client.send_code_request(phone)
+        except Exception:
+            try:
+                await client.disconnect()
+            except Exception:
+                pass
+            raise
 
         self.clients[phone] = client
         self.phone_hashes[phone] = result.phone_code_hash
@@ -55,8 +89,16 @@ class SessionManager:
         if not client.is_connected():
             await client.connect()
 
-        result = await client.send_code_request(phone)
+        try:
+            result = await client.send_code_request(phone)
+        except SendCodeUnavailableError:
+            raise RuntimeError(
+                "Telegram لا يسمح بإرسال كود جديد لهذا الرقم حالياً. "
+                "انتظر قليلاً ثم حاول مرة أخرى."
+            )
 
+        # مهم جداً:
+        # Telegram أعطانا phone_code_hash جديد
         self.phone_hashes[phone] = result.phone_code_hash
 
         return result
@@ -86,12 +128,14 @@ class SessionManager:
                 await client.sign_in(
                     password=password
                 )
+
             else:
                 phone_code_hash = self.phone_hashes.get(phone)
 
                 if not phone_code_hash:
                     raise RuntimeError(
-                        "كود التحقق غير موجود أو انتهت صلاحيته."
+                        "كود التحقق غير موجود. "
+                        "أرسل كوداً جديداً."
                     )
 
                 try:
@@ -100,8 +144,21 @@ class SessionManager:
                         code=code,
                         phone_code_hash=phone_code_hash,
                     )
+
                 except SessionPasswordNeededError:
                     raise
+
+                except PhoneCodeExpiredError:
+                    raise RuntimeError(
+                        "❌ انتهت صلاحية كود Telegram. "
+                        "اضغط إعادة إرسال الكود واستخدم الكود الجديد."
+                    )
+
+                except PhoneCodeInvalidError:
+                    raise RuntimeError(
+                        "❌ كود Telegram غير صحيح. "
+                        "تأكد من استخدام آخر كود وصلك."
+                    )
 
         except SessionPasswordNeededError:
             raise
@@ -111,7 +168,7 @@ class SessionManager:
                 "فشل التحقق من الحساب."
             )
 
-        # حفظ جلسة Telethon قبل نسخها
+        # حفظ جلسة Telethon
         client.session.save()
 
         pending_file = Path(
@@ -122,8 +179,11 @@ class SessionManager:
             str(self._session_path(install_id)) + ".session"
         )
 
-        # إغلاق العميل حتى يتم تحرير ملف SQLite
+        # إغلاق العميل قبل نسخ ملف SQLite
         await client.disconnect()
+
+        self.clients.pop(phone, None)
+        self.phone_hashes.pop(phone, None)
 
         if not pending_file.exists():
             raise RuntimeError(
@@ -140,11 +200,10 @@ class SessionManager:
             target_file,
         )
 
-        # ProcessManager يستخدم المسار بدون امتداد
-        target = self._session_path(install_id)
-
-        # Telethon سيبحث عن target.session
-        return str(target)
+        # ProcessManager يستخدم المسار بدون الامتداد
+        return str(
+            self._session_path(install_id)
+        )
 
     async def close(self):
         for client in list(self.clients.values()):
