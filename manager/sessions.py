@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from telethon import TelegramClient
-from telethon.sessions import StringSession
+from telethon.sessions import StringSession, SQLiteSession
 from telethon.errors import (
     SessionPasswordNeededError,
     PhoneCodeExpiredError,
@@ -272,6 +272,93 @@ class SessionManager:
             raise RuntimeError(
                 f"فشل تحويل Session String: {error}"
             )
+
+    async def install_string_session(
+        self,
+        install_id,
+        session_string,
+        api_id,
+        api_hash,
+    ):
+        session_string = (session_string or "").strip()
+
+        if not session_string:
+            raise RuntimeError("Session String فارغة.")
+
+        client = None
+        target = None
+
+        try:
+            # قراءة Session String والتحقق منها
+            string_session = StringSession(session_string)
+
+            client = TelegramClient(
+                string_session,
+                api_id,
+                api_hash,
+            )
+
+            await client.connect()
+
+            if not await client.is_user_authorized():
+                raise RuntimeError(
+                    "Session String غير صالحة أو غير مسجلة الدخول."
+                )
+
+            source = client.session
+
+            # إنشاء SQLite Session الخاصة بالتنصيب
+            target_base = self._session_path(install_id)
+            target = SQLiteSession(str(target_base))
+
+            target.set_dc(
+                source.dc_id,
+                source.server_address,
+                source.port,
+            )
+
+            target.auth_key = source.auth_key
+
+            if getattr(source, "takeout_id", None):
+                target.takeout_id = source.takeout_id
+
+            target.save()
+
+            target.close()
+            target = None
+
+            target_file = Path(
+                str(target_base) + ".session"
+            )
+
+            if not target_file.exists():
+                raise RuntimeError(
+                    "لم يتم إنشاء ملف جلسة Telegram."
+                )
+
+            return str(target_base)
+
+        except RuntimeError:
+            raise
+
+        except Exception as error:
+            raise RuntimeError(
+                f"فشل تحويل Session String: {error}"
+            ) from error
+
+        finally:
+            if target is not None:
+                try:
+                    target.close()
+                except Exception:
+                    pass
+
+            if client is not None:
+                try:
+                    if client.is_connected():
+                        await client.disconnect()
+                except Exception:
+                    pass
 
     async def close(self):
         for client in list(self.clients.values()):
