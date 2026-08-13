@@ -27,34 +27,32 @@ from Tepthon import LOGS
 
 async def inline_on():
     from .. import tgbot, JmdB, jmubot
-    bot = "BotFather"
 
     try:
+        username = tgbot.me.username
+        if not username:
+            LOGS.error("❌ البوت المساعد لا يملك username.")
+            return
+
+        bot = "BotFather"
+
+        # تفعيل Inline تلقائيًا عند كل تشغيل/تنصيب
         await jmubot.send_message(bot, "/setinline")
         await asyncio.sleep(2)
 
-        await jmubot.send_message(
-            bot,
-            f"@{tgbot.me.username}",
-        )
+        await jmubot.send_message(bot, f"@{username}")
         await asyncio.sleep(2)
 
         await jmubot.send_message(bot, "Search")
+        await asyncio.sleep(2)
+
         await jmubot.send_read_acknowledge(bot)
 
         JmdB.set_key("INLINE_SET", True)
+        LOGS.info(f"✅ تم طلب تفعيل Inline للبوت @{username}")
 
-        LOGS.info(
-            f"✅ تم تفعيل Inline للبوت @{tgbot.me.username}"
-        )
-
-    except Exception as error:
-        JmdB.set_key("INLINE_SET", False)
-
-        LOGS.error(
-            f"❌ فشل تفعيل Inline للبوت @{tgbot.me.username}: {error}"
-        )
-
+    except Exception as er:
+        LOGS.error(f"❌ فشل تفعيل Inline للبوت: {er}")
 
 async def notify():
     from .. import tgbot, JmdB, jmubot
