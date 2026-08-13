@@ -46,6 +46,33 @@ class SessionManager:
             "phone_code_hash": result.phone_code_hash
         }
 
+    async def resend_code(self, phone):
+        item = self.pending.get(phone)
+
+        if not item:
+            raise RuntimeError(
+                "جلسة تسجيل الدخول غير موجودة. أرسل رقم الهاتف من جديد."
+            )
+
+        client = item["client"]
+
+        try:
+            result = await client.send_code_request(phone)
+
+            item["phone_code_hash"] = result.phone_code_hash
+
+            return result
+
+        except FloodWaitError as error:
+            raise RuntimeError(
+                f"⏳ Telegram طلب الانتظار {error.seconds} ثانية قبل إعادة إرسال الكود."
+            )
+
+        except Exception as error:
+            raise RuntimeError(
+                f"❌ فشل إعادة إرسال الكود: {error}"
+            )
+
     async def login_code(
         self,
         install_id,

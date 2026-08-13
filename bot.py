@@ -336,6 +336,43 @@ def setup(dp, db, pm, sessions, owner):
             "أرسل الكود كما وصلك."
         )
 
+    @router.callback_query(F.data == "resend_code")
+    async def resend_code(
+        callback: CallbackQuery,
+        state: FSMContext,
+    ):
+        if callback.from_user.id != owner:
+            return await callback.answer(
+                "غير مصرح",
+                show_alert=True,
+            )
+
+        data = await state.get_data()
+        phone = data.get("phone")
+
+        if not phone:
+            return await callback.answer(
+                "❌ رقم الهاتف غير موجود. ابدأ التنصيب من جديد.",
+                show_alert=True,
+            )
+
+        try:
+            await sessions.resend_code(phone)
+
+            await callback.message.answer(
+                "📨 <b>تم إرسال كود جديد.</b>\\n\\n"
+                "استخدم الكود الجديد فقط."
+            )
+
+            await callback.answer("✅ تم إرسال كود جديد")
+
+        except Exception as error:
+            await callback.answer(
+                str(error),
+                show_alert=True,
+            )
+
+
     @router.message(InstallState.waiting_code)
     async def get_code(
         message: Message,
