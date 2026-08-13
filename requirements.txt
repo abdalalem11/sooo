@@ -1,14 +1,6 @@
+aiogram>=3.20,<4
 telethon==1.42.0
 python-dotenv==1.2.2
-requests
-tabulate
-ipaddress
-redis
-telegraph
 python-decouple
-Pillow
-pytz
-gitpython
-yt-dlp
-ytdl
-youtube-search-python
+redis
+hiredis

@@ -7,16 +7,10 @@ from pathlib import Path
 
 
 class ProcessManager:
-
     def __init__(self, template_dir, accounts_dir):
         self.template = Path(template_dir)
         self.accounts = Path(accounts_dir)
-
-        self.accounts.mkdir(
-            parents=True,
-            exist_ok=True,
-        )
-
+        self.accounts.mkdir(parents=True, exist_ok=True)
         self.procs = {}
 
     def path(self, install_id):
@@ -33,10 +27,7 @@ class ProcessManager:
         if destination.exists():
             shutil.rmtree(destination)
 
-        shutil.copytree(
-            self.template,
-            destination,
-        )
+        shutil.copytree(self.template, destination)
 
         return destination
 
@@ -45,7 +36,19 @@ class ProcessManager:
 
         if not directory.exists():
             raise RuntimeError(
-                "Account directory does not exist"
+                f"Account directory does not exist: {directory}"
+            )
+
+        package = directory / "Tepthon"
+
+        if not package.exists():
+            raise RuntimeError(
+                f"Tepthon package not found: {package}"
+            )
+
+        if not (package / "__main__.py").exists():
+            raise RuntimeError(
+                "Tepthon/__main__.py غير موجود."
             )
 
         self.stop(install_id)
@@ -53,16 +56,12 @@ class ProcessManager:
         env = os.environ.copy()
 
         env["FACTORY_INSTALL_ID"] = str(install_id)
-        env["FACTORY_ACCOUNT_DIR"] = str(
-            directory.absolute()
-        )
+        env["FACTORY_ACCOUNT_DIR"] = str(directory.absolute())
 
         session_path = directory / "session"
-        env["SESSION"] = str(
-            session_path.absolute()
-        )
+        env["SESSION"] = str(session_path.absolute())
 
-        # PORT خاص بمصنع Render وليس بالحساب الفرعي.
+        # PORT مخصص للمصنع الرئيسي على Render
         env.pop("PORT", None)
 
         log_path = directory / "factory.log"
@@ -150,10 +149,7 @@ class ProcessManager:
             shutil.rmtree(directory)
 
     def log(self, install_id):
-        log_path = (
-            self.path(install_id)
-            / "factory.log"
-        )
+        log_path = self.path(install_id) / "factory.log"
 
         if not log_path.exists():
             return ""
