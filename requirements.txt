@@ -1,1 +1,5 @@
+aiogram>=3.0,<4
+fastapi
+uvicorn[standard]
+python-dotenv
 telethon>=1.41,<2
