@@ -331,9 +331,17 @@ def setup(dp, db, pm, sessions, owner):
             InstallState.waiting_code
         )
 
+        b = InlineKeyboardBuilder()
+        b.button(
+            text="🔄 إعادة إرسال الكود",
+            callback_data="resend_code"
+        )
+
         await message.answer(
             "📨 تم إرسال كود Telegram.\n\n"
-            "أرسل الكود كما وصلك."
+            "أرسل الكود كما وصلك.\n"
+            "إذا انتهت صلاحيته، اضغط إعادة إرسال الكود.",
+            reply_markup=b.as_markup(),
         )
 
     @router.callback_query(F.data == "resend_code")
