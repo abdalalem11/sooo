@@ -688,21 +688,40 @@ def setup(dp, db, pm, sessions, owner):
                 show_alert=True,
             )
 
-        iid = int(callback.data.split(":")[1])
-        text = pm.log(iid)
+        try:
+            iid = int(callback.data.split(":")[1])
+        except (ValueError, IndexError):
+            return await callback.answer(
+                "❌ رقم التنصيب غير صحيح.",
+                show_alert=True,
+            )
 
-        if not text:
-            text = "📄 لا يوجد سجل حتى الآن."
+        # إغلاق نافذة الزر مباشرة حتى لا يظهر وكأنه معلق
+        await callback.answer("📄 جاري جلب السجل...")
 
-        if len(text) > 3800:
-            text = text[-3800:]
+        try:
+            text = pm.log(iid)
 
-        await callback.message.answer(
-            f"📄 <b>سجل التنصيب #{iid}</b>\n\n"
-            f"<pre>{text}</pre>"
-        )
+            if not text:
+                text = "📄 لا يوجد سجل حتى الآن."
 
-        await callback.answer()
+            # حماية رسالة Telegram من الأحرف الخاصة في HTML
+            from html import escape
+            text = escape(text)
+
+            if len(text) > 3500:
+                text = text[-3500:]
+
+            await callback.message.answer(
+                f"📄 <b>سجل التنصيب #{iid}</b>\n\n"
+                f"<pre>{text}</pre>"
+            )
+
+        except Exception as error:
+            await callback.message.answer(
+                "❌ تعذر قراءة سجل التنصيب.\n\n"
+                f"<code>{escape(str(error))}</code>"
+            )
 
     @router.callback_query(F.data.startswith("delete:"))
     async def delete_account(callback: CallbackQuery):
