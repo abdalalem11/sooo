@@ -9,6 +9,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
+from aiogram.exceptions import TelegramBadRequest
 from telethon.errors import SessionPasswordNeededError
 
 from config import BOT_TOKEN, OWNER_ID, API_ID, API_HASH
@@ -551,12 +552,16 @@ def setup(dp, db, pm, sessions, owner):
         )
         b.adjust(1)
 
-        await callback.message.edit_text(
-            text,
-            reply_markup=b.as_markup(),
-        )
+        try:
+            await callback.message.edit_text(
+                text,
+                reply_markup=b.as_markup(),
+            )
+        except TelegramBadRequest as error:
+            if "message is not modified" not in str(error):
+                raise
 
-        await callback.answer()
+        await callback.answer("✅ تم تحديث القائمة")
 
     @router.callback_query(F.data.startswith("account:"))
     async def account(
