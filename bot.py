@@ -1,4 +1,6 @@
 import html
+import asyncio
+import time
 from datetime import datetime, timedelta, timezone
 
 from aiogram import Router, F
@@ -42,6 +44,49 @@ class InstallState(StatesGroup):
 
 def allowed(user, owner):
     return user is not None and user.id == owner
+
+
+async def expiration_worker(db, pm):
+    while True:
+        try:
+            now = time.time()
+
+            for row in db.all():
+                if row.get("unlimited"):
+                    continue
+
+                expires_at = row.get("expires_at")
+
+                if not expires_at or expires_at > now:
+                    continue
+
+                install_id = row["id"]
+
+                if row.get("status") == "expired":
+                    continue
+
+                try:
+                    pm.stop(install_id)
+                except Exception as error:
+                    print(
+                        f"Expiration stop error #{install_id}: {error}"
+                    )
+
+                db.status(
+                    install_id,
+                    "expired",
+                )
+
+                print(
+                    f"Install #{install_id} expired."
+                )
+
+        except Exception as error:
+            print(
+                f"Expiration worker error: {error}"
+            )
+
+        await asyncio.sleep(30)
 
 
 # ============================================================
@@ -1474,6 +1519,10 @@ async def main():
         OWNER_ID,
     )
 
+    expiration_task = asyncio.create_task(
+        expiration_worker(db, pm)
+    )
+
     print("==============================")
     print(" Tepthon Factory")
     print(" Database: OK")
@@ -1487,6 +1536,13 @@ async def main():
         await dp.start_polling(bot)
 
     finally:
+
+        expiration_task.cancel()
+
+        try:
+            await expiration_task
+        except asyncio.CancelledError:
+            pass
 
         await sessions.close()
 
