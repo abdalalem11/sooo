@@ -337,8 +337,8 @@ def setup(dp, db, pm, sessions, owner):
             return
 
         text = (
-            "🤖 <b>Tepthon Factory</b>\n\n"
-            "⌁ مرحباً بك عزيزي في مصنع Tepthon\n\n"
+            "🦅 <b>مساعد سورس النسر الأسود @SSSTlF</b>\n\n"
+            "⌁ مرحباً بك عزيزي في مساعد سورس النسر الأسود\n\n"
             "⌁ اختر الخدمة المطلوبة من الأزرار بالأسفل."
         )
 
@@ -360,8 +360,8 @@ def setup(dp, db, pm, sessions, owner):
         await state.clear()
 
         text = (
-            "🤖 <b>Tepthon Factory</b>\n\n"
-            "⌁ مرحباً بك عزيزي في مصنع Tepthon\n\n"
+            "🦅 <b>مساعد سورس النسر الأسود @SSSTlF</b>\n\n"
+            "⌁ مرحباً بك عزيزي في مساعد سورس النسر الأسود\n\n"
             "⌁ اختر الخدمة المطلوبة من الأزرار بالأسفل."
         )
 
