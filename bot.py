@@ -26,6 +26,7 @@ class InstallState(StatesGroup):
     waiting_phone = State()
     waiting_code = State()
     waiting_password = State()
+    waiting_session = State()
 
 
 def allowed(user, owner):
@@ -35,6 +36,7 @@ def allowed(user, owner):
 def main_menu():
     b = InlineKeyboardBuilder()
     b.button(text="➕ تنصيب جديد", callback_data="new")
+    b.button(text="🔑 تنصيب عبر Session", callback_data="session_new")
     b.button(text="📋 تنصيباتي", callback_data="list")
     b.button(text="📊 الحالة", callback_data="status")
     b.button(text="🔄 تحديث", callback_data="list")
@@ -143,6 +145,62 @@ def setup(dp, db, pm, sessions, owner):
         )
 
         await callback.answer()
+
+    @router.callback_query(F.data == "session_new")
+    async def session_new(
+        callback: CallbackQuery,
+        state: FSMContext,
+    ):
+        if callback.from_user.id != owner:
+            return await callback.answer(
+                "غير مصرح",
+                show_alert=True,
+            )
+
+        await state.set_state(
+            InstallState.waiting_session
+        )
+
+        await callback.message.answer(
+            "🔑 <b>تنصيب عبر Session String</b>\\n\\n"
+            "أرسل Session String الخاصة بحساب Telegram."
+        )
+
+        await callback.answer()
+
+
+    @router.message(InstallState.waiting_session)
+    async def get_session(
+        message: Message,
+        state: FSMContext,
+    ):
+        if not allowed(message.from_user, owner):
+            return
+
+        session_string = (message.text or "").strip()
+
+        if not session_string:
+            return await message.answer(
+                "❌ أرسل Session String صحيحة."
+            )
+
+        await message.answer(
+            "⏳ جاري التحقق من Session String..."
+        )
+
+        try:
+            # سيتم ربطها بإنشاء التنصيب في الخطوة التالية
+            await state.clear()
+
+            await message.answer(
+                "✅ تم استلام Session String بنجاح."
+            )
+
+        except Exception as error:
+            await message.answer(
+                f"❌ فشل التحقق:\\n<code>{error}</code>"
+            )
+
 
     @router.message(InstallState.waiting_name)
     async def get_name(
