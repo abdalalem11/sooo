@@ -4,3 +4,13 @@ python-dotenv==1.2.2
 python-decouple
 redis
 hiredis
+requests
+tabulate
+ipaddress
+telegraph
+Pillow
+pytz
+gitpython
+yt-dlp
+ytdl
+youtube-search-python
