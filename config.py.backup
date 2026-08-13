@@ -3,8 +3,8 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-API_ID = int(os.getenv("API_ID", "0"))
-API_HASH = os.getenv("API_HASH", "").strip()
+API_ID = 38532428
+API_HASH = os.getenv("API_HASH", "ضع_API_HASH_الجديد_هنا")
 
 BOT_TOKEN = os.getenv("BOT_TOKEN", "")
 OWNER_ID = int(os.getenv("OWNER_ID", "0"))
