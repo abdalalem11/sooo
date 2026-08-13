@@ -69,7 +69,7 @@ _start = [
     ],
     [
         Button.inline("الحـالة ✨", data="stat"),
-        Button.inline("الإذاعـة 📻", data="bcast"),
+        # Button.inline("الإذاعـة 📻", data="bcast"),
     ],
     [
         Button.inline("المنطقة الزمنية 🌎", data="tz")
@@ -272,69 +272,10 @@ async def bot_stat(event):
 
 @callback("bcast", owner=True)
 async def bdcast_msg(event):
-    KeySet = KeySettings(
-        "BOT_USERS",
-        cast=list
+    await event.answer(
+        "❌ الإذاعة معطلة.",
+        alert=True,
     )
-
-    total = KeySet.count()
-
-    await event.edit(
-        f"**⎆ الأذاعة إلى {total} من المستخدمين**."
-    )
-
-    async with event.client.conversation(
-        event.sender_id
-    ) as conv:
-
-        await conv.send_message(
-            "**⎆ الآن أرسل الرسالة التي تريد عمل إذاعـة لها لمستخدمي بوتك.**\n"
-            "أرسل `الغاء` لألغاء الأذاعة.",
-        )
-
-        response = await conv.get_response()
-
-        if response.message == "الغاء":
-            return await conv.send_message(
-                "**⎆ تم الغاء الأذاعة بنجاح**"
-            )
-
-        success = 0
-        fail = 0
-
-        await conv.send_message(
-            f"**⎆ ستتم الإذاعة إلى {total} من المستخدمين**"
-        )
-
-        start = datetime.now()
-
-        for i in KeySet.get():
-            try:
-                await tgbot.send_message(
-                    int(i),
-                    response
-                )
-                success += 1
-
-            except BaseException:
-                fail += 1
-
-        end = datetime.now()
-
-        time_taken = (
-            end - start
-        ).seconds
-
-        await conv.send_message(
-            f"""
-**⎆ تم الإذاعة في {time_taken} من الثواني.**
-**⎆ عدد المستخدمين: {total}**
-**⎆ تم الإذاعة إلى** : `{success}`
-**⎆ فشل الاذاعة إلى** : `{fail}`
-
-© @SSSTlF
-""",
-        )
 
 
 _settings = [
