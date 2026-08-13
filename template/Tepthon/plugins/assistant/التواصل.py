@@ -96,7 +96,7 @@ async def on_out_mssg(event):
     elif event.text.startswith("/"):
         return
     if to_user:
-        await tgbot.send_message(to_user, event.message)
+        return
 
 
 
