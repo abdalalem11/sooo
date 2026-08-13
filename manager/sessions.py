@@ -2,7 +2,7 @@ from pathlib import Path
 
 from telethon import TelegramClient
 from telethon.sessions import SQLiteSession, StringSession
-from telethon.errors import SessionPasswordNeededError
+from telethon.errors import SessionPasswordNeededError, PhoneCodeInvalidError, PhoneCodeExpiredError, PhoneNumberInvalidError, FloodWaitError
 
 
 class SessionManager:
@@ -27,7 +27,19 @@ class SessionManager:
 
         await client.connect()
 
-        result = await client.send_code_request(phone)
+        try:
+            result = await client.send_code_request(phone)
+
+        except FloodWaitError as error:
+            await client.disconnect()
+            raise RuntimeError(
+                f"Telegram طلب الانتظار قبل المحاولة مرة أخرى. "
+                f"انتظر {error.seconds} ثانية ثم حاول."
+            )
+
+        except Exception:
+            await client.disconnect()
+            raise
 
         self.pending[key] = {
             "client": client,
@@ -53,17 +65,49 @@ class SessionManager:
         client = item["client"]
 
         try:
-            await client.sign_in(
-                phone=phone,
-                code=code,
-                phone_code_hash=item["phone_code_hash"]
-            )
+            if password:
+                await client.sign_in(password=password)
+            else:
+                await client.sign_in(
+                    phone=phone,
+                    code=code,
+                    phone_code_hash=item["phone_code_hash"]
+                )
 
         except SessionPasswordNeededError:
             if not password:
                 raise
 
             await client.sign_in(password=password)
+
+        except PhoneCodeInvalidError:
+            raise RuntimeError(
+                "❌ كود Telegram غير صحيح. أرسل آخر كود وصلك."
+            )
+
+        except PhoneCodeExpiredError:
+            raise RuntimeError(
+                "❌ انتهت صلاحية كود Telegram. "
+                "ابدأ تسجيل الدخول من جديد واطلب كودًا جديدًا."
+            )
+
+        except FloodWaitError as error:
+            raise RuntimeError(
+                f"⏳ Telegram طلب الانتظار {error.seconds} ثانية "
+                "قبل محاولة تسجيل الدخول مرة أخرى."
+            )
+
+        except Exception as error:
+            message = str(error)
+
+            if "ResendCodeRequest" in message:
+                raise RuntimeError(
+                    "⚠️ Telegram رفض إعادة إرسال الكود لأن "
+                    "خيارات إرسال الكود المتاحة استُنفدت. "
+                    "انتظر قليلًا ثم ابدأ تسجيل الدخول من جديد."
+                )
+
+            raise
 
         target = self.session_file(install_id)
         Path(target).parent.mkdir(parents=True, exist_ok=True)
