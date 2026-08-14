@@ -31,20 +31,6 @@ class Database:
             """)
             db.commit()
 
-            # Migration للنسخ القديمة من قاعدة البيانات
-            columns = {
-                row["name"]
-                for row in db.execute(
-                    "PRAGMA table_info(installs)"
-                ).fetchall()
-            }
-
-            if "bot_token" not in columns:
-                db.execute(
-                    "ALTER TABLE installs ADD COLUMN bot_token TEXT"
-                )
-                db.commit()
-
     def init(self):
         with self.connect() as db:
             db.execute("""
