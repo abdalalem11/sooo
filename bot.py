@@ -23,6 +23,7 @@ from manager.sessions import SessionManager
 
 
 router = Router()
+CHANNEL_ID = -1003987046971
 
 
 # ============================================================
@@ -54,7 +55,7 @@ def allowed(user, owner, db):
         return False
 
 
-async def expiration_worker(db, pm):
+async def expiration_worker(db, pm, bot):
     while True:
         try:
             now = time.time()
@@ -88,6 +89,37 @@ async def expiration_worker(db, pm):
                 print(
                     f"Install #{install_id} expired."
                 )
+
+                # إشعار قناة السورس عند انتهاء التنصيب
+                try:
+                    user_id = row.get("user_id")
+                    user = await bot.get_chat(user_id)
+
+                    username = (
+                        f"@{user.username}"
+                        if user.username
+                        else "لا يوجد"
+                    )
+
+                    full_name = html.escape(
+                        user.full_name or "بدون اسم"
+                    )
+
+                    await bot.send_message(
+                        CHANNEL_ID,
+                        "⏰ <b>انتهت مدة التنصيب</b>\n\n"
+                        f"📦 اسم التنصيب: <b>{html.escape(str(row.get('name', 'بدون اسم')))}</b>\n"
+                        f"🆔 ID المستخدم: <code>{user_id}</code>\n"
+                        f"👤 الاسم: <b>{full_name}</b>\n"
+                        f"🔗 اليوزر: <b>{username}</b>\n"
+                        f"🔢 رقم التنصيب: <code>{install_id}</code>\n\n"
+                        "🔴 تم إيقاف التنصيب تلقائيًا."
+                    )
+
+                except Exception as error:
+                    print(
+                        f"Expiry channel notification error #{install_id}: {error}"
+                    )
 
         except Exception as error:
             print(
@@ -1714,7 +1746,7 @@ async def main():
     )
 
     expiration_task = asyncio.create_task(
-        expiration_worker(db, pm)
+        expiration_worker(db, pm, bot)
     )
 
     print("==============================")

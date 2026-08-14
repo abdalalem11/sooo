@@ -244,7 +244,7 @@ async def help_cmd(event: NewMessage.Event):
                 f"❌ فشل Inline query للبوت @{tgbot.me.username}: {er}"
             )
             return await event.eor(
-                "❌ حدث خطأ في Inline. تم تسجيل التفاصيل في اللوج."
+                f"❌ خطأ Inline:\n`{type(er).__name__}: {er}`"
             )
 
         await event.delete()

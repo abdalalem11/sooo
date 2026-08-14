@@ -55,6 +55,17 @@ class Database:
                 )
             """)
 
+            db.execute("""
+                CREATE TABLE IF NOT EXISTS install_requests (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL,
+                    name TEXT NOT NULL,
+                    install_mode TEXT NOT NULL,
+                    status TEXT DEFAULT 'pending',
+                    days INTEGER,
+                    created_at REAL NOT NULL
+                )
+            """)
             db.commit()
 
     def access_request(self, user_id):
