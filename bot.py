@@ -684,13 +684,188 @@ def setup(dp, db, pm, sessions, owner):
                 show_alert=True,
             )
 
+        b = InlineKeyboardBuilder()
+
+        b.button(
+            text="🚫 حظر المستخدم",
+            callback_data=f"ban_install_user:{iid}",
+        )
+        b.button(
+            text="✅ إلغاء حظر المستخدم",
+            callback_data=f"unban_install_user:{iid}",
+        )
+        b.button(
+            text="⏳ تمديد 30 يوم",
+            callback_data=f"extend_install:{iid}:30",
+        )
+        b.button(
+            text="⏳ تمديد 90 يوم",
+            callback_data=f"extend_install:{iid}:90",
+        )
+        b.button(
+            text="⏳ تمديد 365 يوم",
+            callback_data=f"extend_install:{iid}:365",
+        )
+        b.button(
+            text="🔄 تحديث",
+            callback_data=f"admin_account:{iid}",
+        )
+        b.button(
+            text="⬅️ رجوع",
+            callback_data="admin_installs",
+        )
+
+        b.adjust(2, 3, 1, 1)
+
         await callback.message.edit_text(
             "👥 <b>إدارة التنصيب</b>\n\n"
-            + format_install(row),
-            reply_markup=account_menu(iid),
+            + format_install(row)
+            + f"\n👤 حالة الحظر: {'🚫 محظور' if db.is_banned(row['user_id']) else '✅ غير محظور'}",
+            reply_markup=b.as_markup(),
         )
 
         await callback.answer()
+
+    # ========================================================
+    # BAN INSTALL USER
+    # ========================================================
+
+    @router.callback_query(F.data.startswith("ban_install_user:"))
+    async def ban_install_user(callback: CallbackQuery):
+
+        if callback.from_user.id != owner:
+            return await callback.answer("غير مصرح", show_alert=True)
+
+        try:
+            iid = int(callback.data.split(":")[1])
+        except (ValueError, IndexError):
+            return await callback.answer("❌ رقم التنصيب غير صحيح.", show_alert=True)
+
+        row = db.get(iid)
+
+        if not row:
+            return await callback.answer("❌ التنصيب غير موجود.", show_alert=True)
+
+        user_id = row["user_id"]
+
+        if user_id == owner:
+            return await callback.answer(
+                "❌ لا يمكن حظر المالك.",
+                show_alert=True,
+            )
+
+        db.ban_user(user_id)
+
+        try:
+            pm.stop(iid)
+            db.status(iid, "stopped")
+        except Exception as error:
+            print(f"Ban stop warning #{iid}: {error}")
+
+        await callback.answer(
+            f"🚫 تم حظر المستخدم {user_id}.",
+            show_alert=True,
+        )
+
+        await callback.message.edit_text(
+            "👥 <b>إدارة التنصيب</b>\n\n"
+            + format_install(db.get(iid))
+            + f"\n👤 حالة الحظر: 🚫 محظور",
+            reply_markup=account_menu(iid),
+        )
+
+
+    # ========================================================
+    # UNBAN INSTALL USER
+    # ========================================================
+
+    @router.callback_query(F.data.startswith("unban_install_user:"))
+    async def unban_install_user(callback: CallbackQuery):
+
+        if callback.from_user.id != owner:
+            return await callback.answer("غير مصرح", show_alert=True)
+
+        try:
+            iid = int(callback.data.split(":")[1])
+        except (ValueError, IndexError):
+            return await callback.answer("❌ رقم التنصيب غير صحيح.", show_alert=True)
+
+        row = db.get(iid)
+
+        if not row:
+            return await callback.answer("❌ التنصيب غير موجود.", show_alert=True)
+
+        db.unban_user(row["user_id"])
+
+        await callback.answer(
+            f"✅ تم إلغاء حظر المستخدم {row['user_id']}.",
+            show_alert=True,
+        )
+
+        await callback.message.edit_text(
+            "👥 <b>إدارة التنصيب</b>\n\n"
+            + format_install(db.get(iid))
+            + f"\n👤 حالة الحظر: {'🚫 محظور' if db.is_banned(row['user_id']) else '✅ غير محظور'}",
+            reply_markup=account_menu(iid),
+        )
+
+
+    # ========================================================
+    # EXTEND INSTALL
+    # ========================================================
+
+    @router.callback_query(F.data.startswith("extend_install:"))
+    async def extend_install_handler(callback: CallbackQuery):
+
+        if callback.from_user.id != owner:
+            return await callback.answer("غير مصرح", show_alert=True)
+
+        try:
+            _, iid_text, days_text = callback.data.split(":")
+            iid = int(iid_text)
+            days = int(days_text)
+        except (ValueError, IndexError):
+            return await callback.answer("❌ بيانات التمديد غير صحيحة.", show_alert=True)
+
+        row = db.get(iid)
+
+        if not row:
+            return await callback.answer("❌ التنصيب غير موجود.", show_alert=True)
+
+        if row["unlimited"]:
+            return await callback.answer(
+                "♾️ هذا التنصيب غير محدود أصلًا.",
+                show_alert=True,
+            )
+
+        try:
+            new_expiry = db.extend_install(iid, days)
+        except Exception as error:
+            return await callback.answer(
+                f"❌ فشل التمديد: {error}",
+                show_alert=True,
+            )
+
+        expiry = datetime.fromtimestamp(
+            new_expiry,
+            timezone.utc,
+        ).strftime("%Y-%m-%d %H:%M UTC")
+
+        await callback.answer(
+            f"✅ تم تمديد التنصيب {days} يوم.",
+            show_alert=True,
+        )
+
+        updated = db.get(iid)
+
+        await callback.message.edit_text(
+            "👥 <b>إدارة التنصيب</b>\n\n"
+            + format_install(updated)
+            + f"\n👤 حالة الحظر: {'🚫 محظور' if db.is_banned(updated['user_id']) else '✅ غير محظور'}"
+            + f"\n\n⏳ <b>تمديد جديد حتى:</b> <code>{expiry}</code>",
+            reply_markup=account_menu(iid),
+        )
+
 
     # ========================================================
     # LOGIN MENU
@@ -868,6 +1043,12 @@ def setup(dp, db, pm, sessions, owner):
         state: FSMContext,
     ):
 
+        if db.is_banned(callback.from_user.id):
+            return await callback.answer(
+                "🚫 أنت محظور من استخدام خدمة التنصيب.",
+                show_alert=True,
+            )
+
         if not has_access(callback.from_user, owner, db):
             return await callback.answer(
                 "💳 هذه الخدمة مدفوعة. راسل المطور @SSSTlF",
@@ -898,6 +1079,12 @@ def setup(dp, db, pm, sessions, owner):
         callback: CallbackQuery,
         state: FSMContext,
     ):
+
+        if db.is_banned(callback.from_user.id):
+            return await callback.answer(
+                "🚫 أنت محظور من استخدام خدمة التنصيب.",
+                show_alert=True,
+            )
 
         if not has_access(callback.from_user, owner, db):
             return await callback.answer(
