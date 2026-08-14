@@ -1059,7 +1059,12 @@ def setup(dp, db, pm, sessions, owner):
 
         await state.clear()
 
-        # تم إيقاف رسالة ما بعد نجاح التنصيب للمستخدم.
+        await message.answer(
+            "✅ <b>تم التنصيب بنجاح</b>\n\n"
+            f"🆔 رقم التنصيب: <b>{install_id}</b>\n"
+            "🟢 الحالة: يعمل الآن",
+            reply_markup=account_menu(install_id),
+        )
 
     # ========================================================
     # PHONE
@@ -1131,9 +1136,9 @@ def setup(dp, db, pm, sessions, owner):
         state: FSMContext,
     ):
 
-        if callback.from_user.id != owner:
+        if not allowed(callback.from_user, owner, db):
             return await callback.answer(
-                "غير مصرح",
+                "❌ غير مصرح لك.",
                 show_alert=True,
             )
 

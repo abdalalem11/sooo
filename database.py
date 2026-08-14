@@ -186,3 +186,10 @@ class Database:
                 (install_id,)
             )
             db.commit()
+
+    def delete_temporary(self):
+        with self.connect() as db:
+            db.execute(
+                "DELETE FROM installs WHERE unlimited=0"
+            )
+            db.commit()
