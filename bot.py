@@ -219,6 +219,11 @@ def main_menu():
     )
 
     b.button(
+        text="👥 إدارة المنصّبين",
+        callback_data="admin_installs",
+    )
+
+    b.button(
         text="🔗 قناة السورس",
         callback_data="source",
     )
