@@ -39,6 +39,13 @@ class Database:
             """)
 
             db.execute("""
+                CREATE TABLE IF NOT EXISTS banned_users (
+                    user_id INTEGER PRIMARY KEY,
+                    created_at REAL NOT NULL
+                )
+            """)
+
+            db.execute("""
                 CREATE TABLE IF NOT EXISTS install_requests (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     user_id INTEGER NOT NULL,
@@ -161,6 +168,54 @@ class Database:
                 WHERE id=?
             """, (install_id,))
             db.commit()
+
+    def ban_user(self, user_id):
+        with self.connect() as db:
+            db.execute(
+                "INSERT OR REPLACE INTO banned_users (user_id, created_at) VALUES (?, ?)",
+                (user_id, time.time())
+            )
+            db.commit()
+
+    def unban_user(self, user_id):
+        with self.connect() as db:
+            db.execute(
+                "DELETE FROM banned_users WHERE user_id=?",
+                (user_id,)
+            )
+            db.commit()
+
+    def is_banned(self, user_id):
+        with self.connect() as db:
+            row = db.execute(
+                "SELECT 1 FROM banned_users WHERE user_id=?",
+                (user_id,)
+            ).fetchone()
+            return row is not None
+
+    def extend_install(self, install_id, days):
+        with self.connect() as db:
+            row = db.execute(
+                "SELECT expires_at, unlimited FROM installs WHERE id=?",
+                (install_id,)
+            ).fetchone()
+
+            if not row:
+                raise ValueError("التنصيب غير موجود.")
+
+            if row["unlimited"]:
+                return None
+
+            base = row["expires_at"] or time.time()
+            new_expiry = max(base, time.time()) + (days * 86400)
+
+            db.execute(
+                "UPDATE installs SET expires_at=?, status=? WHERE id=?",
+                (new_expiry, "stopped", install_id)
+            )
+            db.commit()
+
+            return new_expiry
 
     def delete(self, install_id):
         with self.connect() as db:
