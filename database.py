@@ -29,23 +29,6 @@ class Database:
                     created_at REAL NOT NULL
                 )
             """)
-            db.commit()
-
-    def init(self):
-        with self.connect() as db:
-            db.execute("""
-                CREATE TABLE IF NOT EXISTS installs (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    user_id INTEGER NOT NULL,
-                    name TEXT NOT NULL,
-                    expires_at REAL,
-                    unlimited INTEGER DEFAULT 0,
-                    status TEXT DEFAULT 'stopped',
-                    phone TEXT,
-                    session_path TEXT,
-                    created_at REAL NOT NULL
-                )
-            """)
 
             db.execute("""
                 CREATE TABLE IF NOT EXISTS access_requests (
