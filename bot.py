@@ -232,7 +232,7 @@ def main_menu():
 # INSTALL MENU
 # ============================================================
 
-def install_menu(user_id=None):
+def install_menu():
     b = InlineKeyboardBuilder()
 
     b.button(
@@ -250,11 +250,6 @@ def install_menu(user_id=None):
         callback_data="list",
     )
 
-    if user_id == owner:
-        b.button(
-            text="🗑️ حذف المؤقتات",
-            callback_data="delete_temporary_confirm",
-        )
 
     b.button(
         text="⬅️ رجوع",
@@ -450,7 +445,7 @@ def setup(dp, db, pm, sessions, owner):
         await callback.message.edit_text(
             "💌 <b>طلب تنصيب</b>\n\n"
             "اختر طريقة تسجيل الحساب:",
-            reply_markup=install_menu(callback.from_user.id),
+            reply_markup=install_menu(),
         )
 
         await callback.answer()
@@ -617,7 +612,7 @@ def setup(dp, db, pm, sessions, owner):
             return await callback.message.edit_text(
                 "✅ <b>تسجيل | LoGiN</b>\n\n"
                 "لا توجد حسابات مسجلة حاليًا.",
-                reply_markup=install_menu(callback.from_user.id),
+                reply_markup=install_menu(),
             )
 
         text = (
@@ -719,11 +714,22 @@ def setup(dp, db, pm, sessions, owner):
                 show_alert=True,
             )
 
+        b = InlineKeyboardBuilder()
+        b.button(
+            text="🗑️ حذف المؤقتات",
+            callback_data="delete_temporary_confirm",
+        )
+        b.button(
+            text="⬅️ رجوع",
+            callback_data="home",
+        )
+        b.adjust(1)
+
         await callback.message.edit_text(
             "👨‍💻 <b>المطور</b>\n\n"
             "⌁ Tepthon Factory\n"
             "⌁ إدارة وتنصيب وتشغيل الحسابات",
-            reply_markup=back_home(),
+            reply_markup=b.as_markup(),
         )
 
         await callback.answer()
@@ -1337,7 +1343,7 @@ def setup(dp, db, pm, sessions, owner):
             return await callback.message.edit_text(
                 "📋 <b>تنصيباتك</b>\n\n"
                 "لا توجد تنصيبات حاليًا.",
-                reply_markup=install_menu(callback.from_user.id),
+                reply_markup=install_menu(),
             )
 
         text = (
@@ -1417,7 +1423,7 @@ def setup(dp, db, pm, sessions, owner):
 
         await callback.message.edit_text(
             "✅ <b>تم حذف التنصيبات المؤقتة.</b>",
-            reply_markup=install_menu(callback.from_user.id),
+            reply_markup=install_menu(),
         )
         await callback.answer()
 
