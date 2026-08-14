@@ -8,6 +8,7 @@ API_HASH = os.getenv("API_HASH", "").strip()
 
 BOT_TOKEN = os.getenv("BOT_TOKEN", "")
 OWNER_ID = int(os.getenv("OWNER_ID", "0"))
+CHANNEL_ID = int(os.getenv("CHANNEL_ID", "0"))
 
 ACCOUNTS_DIR = "data/accounts"
 TEMPLATE_DIR = "template/Tepthon"
