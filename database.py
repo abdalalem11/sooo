@@ -179,6 +179,21 @@ class Database:
             """, (install_id,))
             db.commit()
 
+    def bot_token(self, install_id, token=None):
+        with self.connect() as db:
+            if token is None:
+                row = db.execute(
+                    "SELECT bot_token FROM installs WHERE id=?",
+                    (install_id,),
+                ).fetchone()
+                return row["bot_token"] if row else None
+
+            db.execute(
+                "UPDATE installs SET bot_token=? WHERE id=?",
+                (token, install_id),
+            )
+            db.commit()
+
     def delete(self, install_id):
         with self.connect() as db:
             db.execute(

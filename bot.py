@@ -31,6 +31,7 @@ CHANNEL_ID = -1003987046971
 # ============================================================
 
 class InstallState(StatesGroup):
+    waiting_bot_token = State()
     waiting_name = State()
     waiting_days = State()
     waiting_phone = State()
@@ -902,6 +903,12 @@ def setup(dp, db, pm, sessions, owner):
             install_id=install_id
         )
 
+        await state.set_state(InstallState.waiting_bot_token)
+        return await message.answer(
+            f"✅ تم إنشاء التنصيب رقم <b>{install_id}</b>.\n\n"
+            "🤖 أرسل الآن <b>Bot Token</b> الخاص بهذا التنصيب."
+        )
+
         if install_mode == "session":
 
             await state.set_state(
@@ -925,6 +932,60 @@ def setup(dp, db, pm, sessions, owner):
             "مثال:\n"
             "<code>+9665XXXXXXXX</code>"
         )
+
+    # ========================================================
+    # BOT TOKEN
+    # ========================================================
+
+    @router.message(InstallState.waiting_bot_token)
+    async def get_bot_token(
+        message: Message,
+        state: FSMContext,
+    ):
+        if not allowed(message.from_user, owner, db):
+            return
+
+        token = (message.text or "").strip()
+
+        if ":" not in token or len(token) < 20:
+            return await message.answer(
+                "❌ Bot Token غير صحيح.\n\n"
+                "أرسل التوكن الذي أعطاك إياه @BotFather."
+            )
+
+        data = await state.get_data()
+        install_id = data.get("install_id")
+
+        if not install_id:
+            await state.clear()
+            return await message.answer(
+                "❌ لم يتم العثور على التنصيب."
+            )
+
+        try:
+            db.bot_token(install_id, token)
+
+            install_mode = data.get("install_mode", "phone")
+
+            if install_mode == "session":
+                await state.set_state(InstallState.waiting_session)
+                return await message.answer(
+                    "🤖 تم حفظ Bot Token.\n\n"
+                    "🔑 أرسل الآن Session String."
+                )
+
+            await state.set_state(InstallState.waiting_phone)
+            return await message.answer(
+                "🤖 تم حفظ Bot Token.\n\n"
+                "📱 أرسل رقم الهاتف مع مفتاح الدولة.\n"
+                "مثال: <code>+9665XXXXXXXX</code>"
+            )
+
+        except Exception as error:
+            return await message.answer(
+                "❌ فشل حفظ Bot Token:\n"
+                f"<code>{html.escape(str(error))}</code>"
+            )
 
     # ========================================================
     # SESSION STRING
@@ -1722,6 +1783,7 @@ async def main():
     pm = ProcessManager(
         "template/Tepthon",
         "data/accounts",
+        db,
     )
 
     sessions = SessionManager(

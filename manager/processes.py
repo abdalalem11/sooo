@@ -7,11 +7,12 @@ from pathlib import Path
 
 
 class ProcessManager:
-    def __init__(self, template_dir, accounts_dir):
+    def __init__(self, template_dir, accounts_dir, db=None):
         self.template = Path(template_dir)
         self.accounts = Path(accounts_dir)
         self.accounts.mkdir(parents=True, exist_ok=True)
         self.procs = {}
+        self.db = db
 
     def path(self, install_id):
         return self.accounts / str(install_id)
@@ -78,6 +79,13 @@ class ProcessManager:
 
         # نعطي Tepthon مسار ملف الجلسة الفعلي
         env["SESSION"] = str(session_file.absolute())
+
+        # Bot token الخاص بهذا التنصيب
+        if self.db:
+            bot_token = self.db.bot_token(install_id)
+            if bot_token:
+                env["BOT_TOKEN"] = bot_token
+
 
         env["REDISHOST"] = os.getenv(
             "REDISHOST",
