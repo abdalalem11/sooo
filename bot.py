@@ -1734,6 +1734,12 @@ def setup(dp, db, pm, sessions, owner):
 
             pm.delete(iid)
 
+            # حذف بيانات الجلسة المرتبطة بالتنصيب
+            try:
+                sessions.delete(iid)
+            except Exception as error:
+                print(f"Session delete warning #{iid}: {error}")
+
             db.delete(iid)
 
             await callback.message.edit_text(

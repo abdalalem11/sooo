@@ -360,6 +360,20 @@ class SessionManager:
                 except Exception:
                     pass
 
+    def delete(self, install_id):
+        session_file = Path(
+            str(self._session_path(install_id)) + ".session"
+        )
+
+        if session_file.exists():
+            session_file.unlink()
+
+        pending_dir = self.accounts_dir / str(install_id)
+
+        if pending_dir.exists():
+            import shutil
+            shutil.rmtree(pending_dir, ignore_errors=True)
+
     async def close(self):
         for client in list(self.clients.values()):
             try:
