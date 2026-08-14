@@ -16,14 +16,14 @@ from aiogram import Bot, Dispatcher
 
 from telethon.errors import SessionPasswordNeededError
 
-from config import BOT_TOKEN, OWNER_ID, API_ID, API_HASH
+from config import BOT_TOKEN, OWNER_ID, API_ID, API_HASH, CHANNEL_ID
 from database import Database
 from manager.processes import ProcessManager
 from manager.sessions import SessionManager
 
 
 router = Router()
-CHANNEL_ID = -1003987046971
+# CHANNEL_ID من config
 
 
 # ============================================================
@@ -232,7 +232,7 @@ def main_menu():
 # INSTALL MENU
 # ============================================================
 
-def install_menu():
+def install_menu(user_id=None):
     b = InlineKeyboardBuilder()
 
     b.button(
@@ -249,6 +249,12 @@ def install_menu():
         text="📋 تنصيباتي",
         callback_data="list",
     )
+
+    if user_id == owner:
+        b.button(
+            text="🗑️ حذف المؤقتات",
+            callback_data="delete_temporary_confirm",
+        )
 
     b.button(
         text="⬅️ رجوع",
@@ -324,6 +330,7 @@ def format_install(row):
         "running": "🟢 يعمل",
         "stopped": "🔴 متوقف",
         "error": "⚠️ خطأ",
+        "expired": "⏰ منتهي",
     }.get(status, status)
 
     if row.get("unlimited"):
@@ -342,11 +349,21 @@ def format_install(row):
     else:
         expiry = "غير محدد"
 
+    created_at = row.get("created_at")
+    if created_at:
+        start = datetime.fromtimestamp(
+            created_at,
+            timezone.utc,
+        ).strftime("%Y-%m-%d %H:%M UTC")
+    else:
+        start = "غير معروف"
+
     return (
         f"🆔 <b>{row['id']}</b>\n"
         f"📦 <b>{html.escape(str(row['name']))}</b>\n"
         f"📡 الحالة: {status_text}\n"
-        f"📅 الانتهاء: {expiry}\n"
+        f"📅 البداية: {start}\n"
+        f"⏳ الانتهاء: {expiry}\n"
     )
 
 
@@ -433,7 +450,7 @@ def setup(dp, db, pm, sessions, owner):
         await callback.message.edit_text(
             "💌 <b>طلب تنصيب</b>\n\n"
             "اختر طريقة تسجيل الحساب:",
-            reply_markup=install_menu(),
+            reply_markup=install_menu(callback.from_user.id),
         )
 
         await callback.answer()
@@ -600,7 +617,7 @@ def setup(dp, db, pm, sessions, owner):
             return await callback.message.edit_text(
                 "✅ <b>تسجيل | LoGiN</b>\n\n"
                 "لا توجد حسابات مسجلة حاليًا.",
-                reply_markup=install_menu(),
+                reply_markup=install_menu(callback.from_user.id),
             )
 
         text = (
@@ -891,6 +908,28 @@ def setup(dp, db, pm, sessions, owner):
             )
 
             pm.create(install_id)
+
+            try:
+                start_text = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+                end_text = (
+                    "غير محدود"
+                    if unlimited
+                    else datetime.fromtimestamp(
+                        expires_at, timezone.utc
+                    ).strftime("%Y-%m-%d %H:%M:%S UTC")
+                )
+
+                await message.bot.send_message(
+                    CHANNEL_ID,
+                    "🟢 <b>تم إنشاء تنصيب جديد</b>\n\n"
+                    f"📦 الاسم: <b>{html.escape(name)}</b>\n"
+                    f"🆔 المستخدم: <code>{message.from_user.id}</code>\n"
+                    f"🔢 رقم التنصيب: <code>{install_id}</code>\n"
+                    f"📅 البداية: <code>{start_text}</code>\n"
+                    f"⏳ النهاية: <code>{end_text}</code>"
+                )
+            except Exception as error:
+                print(f"فشل إرسال إشعار التنصيب: {error}")
 
         except Exception as error:
             return await message.answer(
@@ -1298,7 +1337,7 @@ def setup(dp, db, pm, sessions, owner):
             return await callback.message.edit_text(
                 "📋 <b>تنصيباتك</b>\n\n"
                 "لا توجد تنصيبات حاليًا.",
-                reply_markup=install_menu(),
+                reply_markup=install_menu(callback.from_user.id),
             )
 
         text = (
@@ -1343,6 +1382,43 @@ def setup(dp, db, pm, sessions, owner):
             if "message is not modified" not in str(error):
                 raise
 
+        await callback.answer()
+
+    # ========================================================
+    # DELETE TEMPORARY CONFIRMATION
+    # ========================================================
+
+    @router.callback_query(F.data == "delete_temporary_confirm")
+    async def delete_temporary_confirm(callback: CallbackQuery):
+
+        if callback.from_user.id != owner:
+            return await callback.answer("غير مصرح", show_alert=True)
+
+        b = InlineKeyboardBuilder()
+        b.button(text="✅ نعم، احذف", callback_data="delete_temporary")
+        b.button(text="❌ إلغاء", callback_data="install_menu")
+        b.adjust(2)
+
+        await callback.message.edit_text(
+            "⚠️ <b>تأكيد حذف المؤقتات</b>\n\n"
+            "سيتم حذف جميع التنصيبات المؤقتة فقط.\n"
+            "التنصيبات غير المحدودة لن تُحذف.",
+            reply_markup=b.as_markup(),
+        )
+        await callback.answer()
+
+    @router.callback_query(F.data == "delete_temporary")
+    async def delete_temporary(callback: CallbackQuery):
+
+        if callback.from_user.id != owner:
+            return await callback.answer("غير مصرح", show_alert=True)
+
+        db.delete_temporary()
+
+        await callback.message.edit_text(
+            "✅ <b>تم حذف التنصيبات المؤقتة.</b>",
+            reply_markup=install_menu(callback.from_user.id),
+        )
         await callback.answer()
 
     # ========================================================
