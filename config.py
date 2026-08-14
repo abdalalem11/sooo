@@ -13,7 +13,7 @@ ACCOUNTS_DIR = "data/accounts"
 TEMPLATE_DIR = "template/Tepthon"
 DB_PATH = "data/factory.db"
 
-ALLOW_USERS = os.getenv("ALLOW_USERS", "true").lower() in ("1", "true", "yes")
+ALLOW_USERS = os.getenv("ALLOW_USERS", "true").lower() == "true"
 DEFAULT_DAYS = int(os.getenv("DEFAULT_DAYS", "30"))
 MAX_DAYS = int(os.getenv("MAX_DAYS", "3650"))
 
