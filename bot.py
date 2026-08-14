@@ -925,14 +925,26 @@ def setup(dp, db, pm, sessions, owner):
                     ).strftime("%Y-%m-%d %H:%M:%S UTC")
                 )
 
+                username = (
+                    f"@{message.from_user.username}"
+                    if message.from_user.username
+                    else "لا يوجد"
+                )
+
+                full_name = html.escape(
+                    message.from_user.full_name or "بدون اسم"
+                )
+
                 await message.bot.send_message(
                     CHANNEL_ID,
                     "🟢 <b>تم إنشاء تنصيب جديد</b>\n\n"
-                    f"📦 الاسم: <b>{html.escape(name)}</b>\n"
-                    f"🆔 المستخدم: <code>{message.from_user.id}</code>\n"
+                    f"📦 اسم التنصيب: <b>{html.escape(name)}</b>\n"
+                    f"👤 الاسم: <b>{full_name}</b>\n"
+                    f"🔗 اليوزر: <b>{username}</b>\n"
+                    f"🆔 ID المستخدم: <code>{message.from_user.id}</code>\n"
                     f"🔢 رقم التنصيب: <code>{install_id}</code>\n"
-                    f"📅 البداية: <code>{start_text}</code>\n"
-                    f"⏳ النهاية: <code>{end_text}</code>"
+                    f"📅 تاريخ البداية: <code>{start_text}</code>\n"
+                    f"⏳ تاريخ الانتهاء: <code>{end_text}</code>"
                 )
             except Exception as error:
                 print(f"فشل إرسال إشعار التنصيب: {error}")
