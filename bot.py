@@ -597,6 +597,102 @@ def setup(dp, db, pm, sessions, owner):
 
 
     # ========================================================
+    # ADMIN INSTALLS
+    # ========================================================
+
+    @router.callback_query(F.data == "admin_installs")
+    async def admin_installs(callback: CallbackQuery):
+
+        if callback.from_user.id != owner:
+            return await callback.answer(
+                "غير مصرح",
+                show_alert=True,
+            )
+
+        rows = db.all()
+
+        if not rows:
+            return await callback.message.edit_text(
+                "👥 <b>إدارة المنصّبين</b>\n\n"
+                "لا توجد تنصيبات حاليًا.",
+                reply_markup=back_home(),
+            )
+
+        text = "👥 <b>جميع المنصّبين</b>\n\n"
+
+        b = InlineKeyboardBuilder()
+
+        for row in rows:
+            status = {
+                "running": "🟢",
+                "stopped": "🔴",
+                "error": "⚠️",
+                "expired": "⏰",
+            }.get(row.get("status"), "❔")
+
+            text += (
+                f"{status} <b>#{row['id']}</b> — "
+                f"{html.escape(str(row.get('name', 'بدون اسم')))}\n"
+                f"👤 <code>{row.get('user_id')}</code>\n\n"
+            )
+
+            b.button(
+                text=f"📦 {row.get('name', 'بدون اسم')} #{row['id']}",
+                callback_data=f"admin_account:{row['id']}",
+            )
+
+        b.button(
+            text="⬅️ الرئيسية",
+            callback_data="home",
+        )
+
+        b.adjust(1)
+
+        await callback.message.edit_text(
+            text,
+            reply_markup=b.as_markup(),
+        )
+
+        await callback.answer()
+
+    # ========================================================
+    # ADMIN ACCOUNT
+    # ========================================================
+
+    @router.callback_query(F.data.startswith("admin_account:"))
+    async def admin_account(callback: CallbackQuery):
+
+        if callback.from_user.id != owner:
+            return await callback.answer(
+                "غير مصرح",
+                show_alert=True,
+            )
+
+        try:
+            iid = int(callback.data.split(":")[1])
+        except (ValueError, IndexError):
+            return await callback.answer(
+                "❌ رقم التنصيب غير صحيح.",
+                show_alert=True,
+            )
+
+        row = db.get(iid)
+
+        if not row:
+            return await callback.answer(
+                "❌ التنصيب غير موجود.",
+                show_alert=True,
+            )
+
+        await callback.message.edit_text(
+            "👥 <b>إدارة التنصيب</b>\n\n"
+            + format_install(row),
+            reply_markup=account_menu(iid),
+        )
+
+        await callback.answer()
+
+    # ========================================================
     # LOGIN MENU
     # ========================================================
 
