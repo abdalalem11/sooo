@@ -75,6 +75,7 @@ class ProcessManager:
 
         env["FACTORY_INSTALL_ID"] = str(install_id)
         env["FACTORY_ACCOUNT_DIR"] = str(directory.absolute())
+        env["TEPTHON_SESSION"] = str((directory / "session.session").absolute())
 
         # نعطي Tepthon مسار ملف الجلسة الفعلي
         env["SESSION"] = str(session_file.absolute())
