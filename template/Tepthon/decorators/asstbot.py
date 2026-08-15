@@ -90,6 +90,12 @@ def in_pattern(pattern=None, owner=False, button=None, **kwargs):
                         url="https://t.me/SSSTlFd",
                         description="(c) Tepthon",
                         text=MSG,
+                        thumb=InputWebDocument(
+                            "resources/Tepthon.jpg",
+                            0,
+                            "image/jpeg",
+                            [],
+                        ),
                         buttons=IN_BTTS,
                     )
                 ]
