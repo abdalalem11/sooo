@@ -5,7 +5,7 @@ from PIL import Image
 from telethon.tl import types
 from telethon.utils import get_display_name, get_peer_id
 
-from database import JmdB
+from Tepthon.database import JmdB
 from resources import DEVLIST
 
 from . import async_search

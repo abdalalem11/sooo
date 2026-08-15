@@ -8,8 +8,8 @@ from telethon.utils import get_display_name
 from Tepthon import LOGS, jmubot, HNDLR
 from Tepthon.decorators import fullsudos, owner_and_sudos
 from Tepthon.config import version
-from database import JmdB
-from database.core.settings import KeySettings
+from Tepthon.database import JmdB
+from Tepthon.database.core.settings import KeySettings
 
 from . import *
 

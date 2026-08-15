@@ -8,7 +8,7 @@ from telethon.events import NewMessage
 
 from Tepthon.decorators.asstbot import callback, in_pattern
 from Tepthon.load_plug import PLUGINS
-from database import CMD_HELP, LIST, InlinePlugin, InlinePaths
+from Tepthon.database import CMD_HELP, LIST, InlinePlugin, InlinePaths
 from .. import HNDLR, LOGS, tgbot, jmdB, jmubot, Tepthon_cmd, inline_pic
 
 

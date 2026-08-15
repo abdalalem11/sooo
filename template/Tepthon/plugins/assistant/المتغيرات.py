@@ -7,7 +7,7 @@ from os import remove
 import requests
 from telegraph import upload_file as upl
 from telethon import Button, events
-from database import JmdB
+from Tepthon.database import JmdB
 
 from telethon.tl.types import MessageMediaWebPage
 from telethon.utils import get_peer_id

@@ -1,5 +1,5 @@
 from contextlib import suppress
-from database import JmdB
+from Tepthon.database import JmdB
 from .manager import eod, eor
 
 

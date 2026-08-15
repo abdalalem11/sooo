@@ -49,7 +49,7 @@ from telethon.tl.functions.contacts import (BlockRequest, GetBlockedRequest,
 from telethon.tl.functions.messages import ReportSpamRequest
 from telethon.utils import get_display_name, resolve_bot_file_id
 
-from database.core.settings import KeySettings
+from Tepthon.database.core.settings import KeySettings
 
 from .. import (LOGS, tgbot, callback, in_pattern, inline_mention,
                jmdB, jmubot, Tepthon_cmd)

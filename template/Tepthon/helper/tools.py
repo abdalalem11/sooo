@@ -5,7 +5,7 @@ from . import run_async
 from .. import LOGS, jmubot
 
 from telegraph import Telegraph
-from database import jmdB
+from Tepthon.database import jmdB
 
 def _get_value(stri):
     value = stri.strip()

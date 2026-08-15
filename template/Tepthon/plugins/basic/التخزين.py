@@ -25,7 +25,7 @@ from telethon.tl.types import (MessageEntityMention, MessageEntityMentionName,
 from telethon.utils import get_display_name
 
 from .. import LOGS, tgbot, JmdB, jmdB, jmubot, Tepthon_cmd
-from database.core.settings import KeySettings
+from Tepthon.database.core.settings import KeySettings
 
 
 CACHE_SPAM = {}

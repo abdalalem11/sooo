@@ -10,7 +10,7 @@ from telethon.events import CallbackQuery, InlineQuery, NewMessage
 from telethon.tl.types import InputWebDocument
 
 from Tepthon import LOGS, tgbot, jmdB, jmubot
-from database import InlinePlugin, InlinePaths
+from Tepthon.database import InlinePlugin, InlinePaths
 from ..helper import make_html_telegraph as mkgraph
 from ..helper import admin_check
 from . import owner_and_sudos

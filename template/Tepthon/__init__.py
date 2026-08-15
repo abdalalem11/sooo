@@ -7,7 +7,7 @@ from .config import Var
 from .core.client import TepthonClient
 from .core.session import both_session
 from .core.logger import *
-from database import jmdB, JmdB
+from Tepthon.database import jmdB, JmdB
 
 
 version = "1.0.0"
