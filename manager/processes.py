@@ -79,6 +79,12 @@ class ProcessManager:
         # نعطي Tepthon مسار ملف الجلسة الفعلي
         env["SESSION"] = str(session_file.absolute())
 
+        # إعدادات Tepthon من متغيرات Render
+        env["API_ID"] = os.getenv("API_ID", "")
+        env["API_HASH"] = os.getenv("API_HASH", "")
+        env["BOT_TOKEN"] = os.getenv("BOT_TOKEN", "")
+        env["OWNER_ID"] = os.getenv("OWNER_ID", "")
+
         env["REDISHOST"] = os.getenv(
             "REDISHOST",
             "127.0.0.1",
