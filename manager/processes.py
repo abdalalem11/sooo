@@ -39,7 +39,7 @@ class ProcessManager:
                 f"Account directory does not exist: {directory}"
             )
 
-        package = directory / "Tepthon"
+        package = directory
 
         if not package.exists():
             raise RuntimeError(
@@ -48,7 +48,7 @@ class ProcessManager:
 
         if not (package / "__main__.py").exists():
             raise RuntimeError(
-                "Tepthon/__main__.py غير موجود."
+                "__main__.py غير موجود."
             )
 
         # Telethon SQLite session تكون عادةً:
