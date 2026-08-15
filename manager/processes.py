@@ -10,7 +10,12 @@ class ProcessManager:
     def __init__(self, template_dir, accounts_dir):
         self.template = Path(template_dir)
         self.accounts = Path(accounts_dir)
-        self.accounts.mkdir(parents=True, exist_ok=True)
+
+        self.accounts.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
+
         self.procs = {}
 
     def path(self, install_id):
@@ -27,9 +32,41 @@ class ProcessManager:
         if destination.exists():
             shutil.rmtree(destination)
 
-        shutil.copytree(self.template, destination)
+        shutil.copytree(
+            self.template,
+            destination,
+        )
 
         return destination
+
+    def find_session(self, directory):
+        """
+        البحث عن ملف Telethon SQLite Session
+        داخل مجلد الحساب بالكامل.
+        """
+
+        # الاسم الأساسي المتوقع
+        preferred = directory / "session.session"
+
+        if preferred.is_file():
+            return preferred
+
+        # البحث داخل الحساب
+        candidates = sorted(
+            directory.rglob("*.session")
+        )
+
+        # استبعاد أي ملفات غير صالحة
+        candidates = [
+            path
+            for path in candidates
+            if path.is_file()
+        ]
+
+        if candidates:
+            return candidates[0]
+
+        return None
 
     def start(self, install_id):
         directory = self.path(install_id)
@@ -39,7 +76,7 @@ class ProcessManager:
                 f"Account directory does not exist: {directory}"
             )
 
-        package = directory
+        package = directory / "Tepthon"
 
         if not package.exists():
             raise RuntimeError(
@@ -48,44 +85,59 @@ class ProcessManager:
 
         if not (package / "__main__.py").exists():
             raise RuntimeError(
-                "__main__.py غير موجود."
+                "__main__.py غير موجود داخل Tepthon."
             )
 
-        # Telethon SQLite session تكون عادةً:
-        # session.session
-        session_base = directory / "session"
-        session_file = directory / "session.session"
+        # البحث عن Session الخاصة بهذا التنصيب
+        session_file = self.find_session(directory)
 
-        if not session_file.exists():
-            # دعم أي ملف session موجود داخل مجلد الحساب
-            candidates = list(directory.glob("*.session"))
+        if session_file is None:
+            raise RuntimeError(
+                f"Session غير موجودة للحساب {install_id}. "
+                "سجّل الدخول أولاً من المصنع."
+            )
 
-            if candidates:
-                session_file = candidates[0]
-                session_base = session_file.with_suffix("")
-            else:
-                raise RuntimeError(
-                    f"Session غير موجودة للحساب {install_id}. "
-                    "سجّل الدخول أولاً من المصنع."
-                )
-
+        # إيقاف النسخة القديمة إن كانت تعمل
         self.stop(install_id)
 
         env = os.environ.copy()
 
-        env["FACTORY_INSTALL_ID"] = str(install_id)
-        env["FACTORY_ACCOUNT_DIR"] = str(directory.absolute())
-        env["TEPTHON_SESSION"] = str((directory / "session.session").absolute())
+        # معلومات المصنع
+        env["FACTORY_INSTALL_ID"] = str(
+            install_id
+        )
 
-        # نعطي Tepthon مسار ملف الجلسة الفعلي
-        env["SESSION"] = str(session_file.absolute())
+        env["FACTORY_ACCOUNT_DIR"] = str(
+            directory.absolute()
+        )
 
-        # إعدادات Tepthon من متغيرات Render
-        env["API_ID"] = os.getenv("API_ID", "")
-        env["API_HASH"] = os.getenv("API_HASH", "")
-        env["BOT_TOKEN"] = os.getenv("BOT_TOKEN", "")
-        env["OWNER_ID"] = os.getenv("OWNER_ID", "")
+        # Session الخاصة بالحساب
+        session_path = str(
+            session_file.absolute()
+        )
 
+        env["SESSION"] = session_path
+        env["TEPTHON_SESSION"] = session_path
+
+        # إعدادات Tepthon
+        api_id = os.getenv("API_ID", "")
+        api_hash = os.getenv("API_HASH", "")
+        bot_token = os.getenv("BOT_TOKEN", "")
+        owner_id = os.getenv("OWNER_ID", "")
+
+        if api_id:
+            env["API_ID"] = api_id
+
+        if api_hash:
+            env["API_HASH"] = api_hash
+
+        if bot_token:
+            env["BOT_TOKEN"] = bot_token
+
+        if owner_id:
+            env["OWNER_ID"] = owner_id
+
+        # Redis
         env["REDISHOST"] = os.getenv(
             "REDISHOST",
             "127.0.0.1",
@@ -96,9 +148,11 @@ class ProcessManager:
             "6379",
         )
 
-        # PORT خاص بالمصنع الرئيسي
+        # لا نسمح لنسخة Tepthon بأخذ PORT
+        # الخاص بالمصنع الرئيسي
         env.pop("PORT", None)
 
+        # سجل خاص بكل تنصيب
         log_path = directory / "factory.log"
 
         log_file = open(
@@ -106,6 +160,18 @@ class ProcessManager:
             "a",
             encoding="utf-8",
         )
+
+        # معلومات تشخيصية
+        log_file.write(
+            "\n"
+            "========================================\n"
+            f"FACTORY INSTALL ID: {install_id}\n"
+            f"ACCOUNT DIR: {directory.absolute()}\n"
+            f"SESSION: {session_path}\n"
+            "========================================\n"
+        )
+
+        log_file.flush()
 
         process = subprocess.Popen(
             [
@@ -154,6 +220,7 @@ class ProcessManager:
 
             try:
                 process.wait(timeout=8)
+
             except Exception:
                 try:
                     os.killpg(
@@ -194,5 +261,6 @@ class ProcessManager:
                 encoding="utf-8",
                 errors="replace",
             )
+
         except Exception as error:
             return f"Unable to read log: {error}"
