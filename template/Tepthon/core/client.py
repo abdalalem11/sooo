@@ -16,10 +16,10 @@ from telethon.errors import (
 from telethon.tl.types import User
 
 from Tepthon.config import Var
-from database import jmdB
+from Tepthon.database import jmdB
 from Tepthon.core.helper import fast_download
 from Tepthon.core.logger import LOGS, TelethonLogger
-from resources import blacklisted_users
+from Tepthon.resources import blacklisted_users
 
 
 class TepthonClient(TelegramClient):
